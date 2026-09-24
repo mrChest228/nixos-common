@@ -14,7 +14,7 @@
             tree = builtins.filterAttrs (k: v: v != null) treeWithNulls;
 
             topLevel = { imports = (builtins.filter (x: builtins.isPath x) (builtins.attrValues tree)); };
-            all = { imports = (topLevel.imports ++ (builtins.concatLists (builitins.map (folder: folder.all.imports) (builtins.filter (x: builtins.isAttrs x) (builtins.attrValues tree))))); };
+            all = { imports = (topLevel.imports ++ (builtins.concatLists (builtins.map (folder: folder.all.imports) (builtins.filter (x: builtins.isAttrs x) (builtins.attrValues tree))))); };
         in
             tree // { inherit all topLevel; }
         );
