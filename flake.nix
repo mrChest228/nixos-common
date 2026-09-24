@@ -16,8 +16,8 @@
             topLevel = { imports = (builtins.filter (x: builtins.isPath x) (builtins.attrValues tree)); };
             all = { imports = (topLevel.imports ++ (lib.flatten (builitins.map (folder: folder.all.imports) (builtins.filter (x: builtins.isAttrs x) (builtins.attrValues tree))))); };
         in
-            tree // { inherit all topLevel; };
-        });
+            tree // { inherit all topLevel; }
+        );
     in {
         sys = mkFileTree ./sys;
         hm = mkFileTree ./hm;
