@@ -1,6 +1,6 @@
 {
-    # A simple building tree of files in set for easy imports
-    outputs = let
+    # A simple building tree of files set flake for easy imports
+    outputs = { ... }: let
         mkFileTree = (path: let
             ls = builtins.readDir path;
             treeWithNulls = builtins.mapAttrs (name: type:
