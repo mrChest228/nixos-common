@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }: 
+{ config, lib, com, pkgs, vars, self, ... }:
 let
     cfg = config.services.nbfc-linux;
     jsonFormat = pkgs.formats.json {};

@@ -1,4 +1,4 @@
-{ config, lib, libs, pkgs, vars, ... }:
+{ config, lib, com, pkgs, vars, self, ... }:
 {
     programs.nix-ld = {
         enable = true;

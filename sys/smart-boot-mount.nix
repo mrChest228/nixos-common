@@ -1,4 +1,4 @@
-{ config, lib, pkgs, vars, ... }: {
+{ config, lib, com, pkgs, vars, self, ... }: {
     # boot.automount is based on LoaderDevicePartUUID that are given from bootloader. Systemd-boot gives this variable, but some unknown bootloader (maybe even GRUB2) doesn't give it. I hate this. This service mounts /boot only from UEFI variables
     systemd.services.smart-boot-mount = {
         description = "ESP mount based on UEFI BootCurrent/BootXXXX variables only";

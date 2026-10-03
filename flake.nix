@@ -5,9 +5,9 @@
             ls = builtins.readDir path;
             treeWithNulls = builtins.mapAttrs (name: type:
                 if type == "directory" then
-                    mkFileTree "${path}/${name}"
+                    mkFileTree (path + "/${name}")
                 else if type == "regular" && builtins.match ".*\\.nix" name != null then
-                    "${path}/${name}"
+                    path + "/${name}"
                 else
                     null
             ) ls;

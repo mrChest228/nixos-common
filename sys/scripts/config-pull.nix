@@ -1,4 +1,4 @@
-{ config, lib, pkgs, vars, self, ... }:
+{ config, lib, com, pkgs, vars, self, ... }:
 let
     script = pkgs.writeScriptBin "config-pull" ''
         #!${pkgs.nushell}/bin/nu
