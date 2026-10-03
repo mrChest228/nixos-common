@@ -1,4 +1,4 @@
-{ config, lib, pkgs, vars, ... }: {
+{ config, lib, com, pkgs, vars, self, ... }: {
     services = {
         power-profiles-daemon.enable = false; # TLP is better
         tlp = {

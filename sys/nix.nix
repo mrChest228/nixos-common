@@ -1,4 +1,4 @@
-{ config, lib, pkgs, vars, self, ... }: {
+{ config, lib, com, pkgs, vars, self, ... }: {
     nix = {
         channel.enable = false;
         settings = {

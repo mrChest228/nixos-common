@@ -1,4 +1,4 @@
-{ config, pkgs, vars, ... }: {
+{ config, lib, com, pkgs, vars, self, ... }: {
     programs = {
         gh = {
             enable = true;

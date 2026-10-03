@@ -1,4 +1,4 @@
-{ config, lib, pkgs, vars, self, ... }: {
+{ config, lib, com, pkgs, vars, self, ... }: {
     powerManagement.enable = true;
     # Hibernate after 30 min with lid closed
     services.logind.settings.Login = {

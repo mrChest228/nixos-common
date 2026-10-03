@@ -1,4 +1,4 @@
-{ config, libs, lib, pkgs, vars, ... }:
+{ config, lib, com, pkgs, vars, self, ... }:
 {
     xdg = {
         enable = true;

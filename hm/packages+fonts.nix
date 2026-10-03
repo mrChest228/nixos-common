@@ -1,4 +1,4 @@
-{ config, lib, pkgs, vars, self, ... }:
+{ config, lib, com, pkgs, vars, self, ... }:
 {
     fonts.fontconfig.enable = true;
     home.packages = with pkgs; [
