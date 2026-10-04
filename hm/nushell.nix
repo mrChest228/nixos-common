@@ -46,80 +46,11 @@
 
                 sudo nu --config /home/${vars.user}/.config/nushell/config.nu --env-config /home/${vars.user}/.config/nushell/env.nu -c $cmd
             }
-            def config-commit [message?: string] {
-                cd ${vars.configPath}/cur
-                git add .
-                let push = (
-                    if not ((git status -s) | is-empty) {
-                        echo "File changes:"
- 
-                        # Changes with time printing
-                        let colors = [
-                            { code: "?", color: (ansi dark_gray) }
-                            { code: "!", color: (ansi dark_gray) }
-                            { code: "A", color: (ansi green) }
-                            { code: "M", color: (ansi yellow) }
-                            { code: "D", color: (ansi red) }
-                            { code: "R", color: (ansi cyan) }
-                            { code: "C", color: (ansi magenta) }
-                            { code: "T", color: (ansi blue) }
-                            { code: "U", color: (ansi red) }
-                        ]
-                        let changesGit = (git status --porcelain=v1 -z | split row (char nul) | drop)
-                        mut changes = []
-                        mut i = 0
-                        loop {
-                            if $i >= ($changesGit | length) {
-                                break
-                            }
-                            let line = ($changesGit | get $i)
-                            let x = ($line | str substring 0..0)
-                            let color = ($colors | where code == $x | if ($in | length) != 1 { ansi red } else { $in | first | get color })
-                            mut pths = [($line | str substring 3..)]
-                            if ($x == "R" or $x == "C") {
-                                $i = $i + 1
-                                $pths = ($pths | append ($changesGit | get $i))
-                            }
-                            let pth = ($pths | get 0)
-                            let time = if ($pth | path exists) { ls -D $pth | get 0 | get modified | format date '%Y-%m-%d %H:%M:%S' } else { "?" }
-
-                            if ($pths | get 0 | str contains " ") {
-                                $pths = ($pths | upsert 0 { |pth| $"\"($pth)\"" })
-                            }
-                            if (($pths | length) == 2 and ($pths | get 1 | str contains " ")) {
-                                $pths = ($pths | upsert 1 { |pth| $"\"($pth)\"" })
-                            }
-
-                            let pthTo = if ($pths | length) == 2 { $" -> ($pths | get 0)" } else { "" }
-                            print $"($color)($x)  ($pths | last)($pthTo)(ansi rst) ($time)"
-                            $i = $i + 1
-                        }
-                        let msg = if ($message | is-empty) { $"Commit (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }
-                        silent { git commit -m $"($msg)" }
-                        true
-                    } else {
-                        print $"(ansi cyan)Nothing to commit(ansi rst)"
-                        if (not ($message | is-empty) and ($message != (git log -1 --format=%s))) {
-                            let reply = (input "Do you want to rename the last commit? [Y/n]: " | str lowercase)
-                            if ($reply == "" or $reply == "y" or $reply == "ye" or $reply == "yes") {
-                                silent { git commit --amend -m $"($message)" }
-                                true
-                            } else { false }
-                        } else { false }
-                    }
-                )
-                if $push {
-                    git --no-pager log -1 --oneline --format="%C(magenta)%h%C(auto)%d %s"
-                    let start = (date now)
-                    silent { sudo nu -c 'with-env { GIT_SSH_COMMAND: "ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" } { git push --force-with-lease }' }
-                    print $"(ansi green_bold)Successful push in ((date now) - $start)(ansi rst)"
-                }
-            }
             def update [message?: string] {
                 cd ${vars.configPath}/cur
                 nudo nix flake update
                 if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
-                    try { nudo config-commit (if ($message | is-empty) { $"Update (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
+                    try { config-commit (if ($message | is-empty) { $"Update (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
                 }
 
                 let bootedGen = (readlink -f /run/current-system)
@@ -141,7 +72,7 @@
             def rebuild [message?: string] {
                 cd ${vars.configPath}/cur
                 if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
-                    try { nudo config-commit (if ($message | is-empty) { $"Rebuild (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
+                    try { config-commit (if ($message | is-empty) { $"Rebuild (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
                 }
 
                 let bootedGen = (readlink -f /run/current-system)
@@ -162,7 +93,7 @@
             def reconf [message?: string] {
                 cd ${vars.configPath}/cur
                 if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
-                    try { nudo config-commit (if ($message | is-empty) { $"Reconf (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
+                    try { config-commit (if ($message | is-empty) { $"Reconf (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
                 }
                 nh home switch
 
