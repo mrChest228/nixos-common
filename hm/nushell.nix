@@ -47,7 +47,7 @@
                 sudo nu --config /home/${vars.user}/.config/nushell/config.nu --env-config /home/${vars.user}/.config/nushell/env.nu -c $cmd
             }
             def config-commit [message?: string] {
-                cd ${vars.configPath}
+                cd ${vars.configPath}/cur
                 git add .
                 let push = (
                     if not ((git status -s) | is-empty) {
@@ -116,7 +116,7 @@
                 }
             }
             def update [message?: string] {
-                cd ${vars.configPath}
+                cd ${vars.configPath}/cur
                 nudo nix flake update
                 if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
                     try { nudo config-commit (if ($message | is-empty) { $"Update (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
@@ -139,7 +139,7 @@
                 gen clean
             }
             def rebuild [message?: string] {
-                cd ${vars.configPath}
+                cd ${vars.configPath}/cur
                 if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
                     try { nudo config-commit (if ($message | is-empty) { $"Rebuild (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
                 }
@@ -160,7 +160,7 @@
                 gen clean
             }
             def reconf [message?: string] {
-                cd ${vars.configPath}
+                cd ${vars.configPath}/cur
                 if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
                     try { nudo config-commit (if ($message | is-empty) { $"Reconf (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
                 }
