@@ -33,7 +33,7 @@
     };
     programs.nh = {
         enable = true;
-        flake = vars.configPath;
+        flake = "${vars.configPath}/cur";
         clean = {
             enable = true;
             dates = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
