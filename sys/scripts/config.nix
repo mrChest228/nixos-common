@@ -37,14 +37,11 @@ in {
         commands = map (name: { command = "${commands.${name}}/bin/${name}"; options = [ "NOPASSWD" ]; }) names;
     }];
     systemd.tmpfiles.rules = [
-        "Z ${vars.configPath}/common - root root -"
-        "Z ${vars.configPath}/nixos-* - root root -"
-        "Z ${vars.configPath}/common/hm - ${firstUser} users -"
-        "Z ${vars.configPath}/nixos-${vars.host}/hm - ${firstUser} users -"
-    ] ++ (builtins.concatMap (user: [
-        "Z ${vars.configPath}/common/hm/${user} - ${user} users -"
-        "Z ${vars.configPath}/nixos-${vars.host}/hm/${user} - ${user} users -"
-    ]) vars.users);
+        "Z ${vars.configPath} - root root -"
+    ] ++ (builtins.concatMap (repo: [
+        "z ${vars.configPath}/${repo}/hm - ${firstUser} users -"
+        "z ${vars.configPath}/${repo}/hm/*.nix - ${firstUser} users -"
+    ] ++ (builtins.map (user: "Z ${vars.configPath}/${repo}/hm/${user} - ${user} users -") vars.users)) [ "common" vars.host ]);
     systemd.services.config-sync = {
         path = [ pkgs.bash pkgs.coreutils pkgs.git pkgs.nix pkgs.nushell pkgs.openssh pkgs.systemd pkgs.util-linux ];
         serviceConfig = {
