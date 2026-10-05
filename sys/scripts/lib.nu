@@ -22,14 +22,14 @@ export def --wrapped gitSafe [repo: string, ...args: string] {
     ^git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c $"core.sshCommand=($SSH_COMMAND)" ...$args
 }
 
-# "common" -> $CONFIG_PATH/common, anything else is treated as a hostname -> $CONFIG_PATH/nixos-<host>
+# "common" -> $CONFIG_PATH/common, anything else is treated as a hostname -> $CONFIG_PATH/<host>
 export def repoPath [host: string] {
-    if $host == "common" { $"($CONFIG_PATH)/common" } else { $"($CONFIG_PATH)/nixos-($host)" }
+    if $host == "common" { $"($CONFIG_PATH)/common" } else { $"($CONFIG_PATH)/($host)" }
 }
 
-# All host repos in $CONFIG_PATH (dirs named nixos-*; cur and common are excluded by the pattern)
+# All host repos in $CONFIG_PATH (git repos other than common; the cur mount is not a separate repo)
 export def hostRepos [] {
-    ls -D $"($CONFIG_PATH)/nixos-*" | where type == dir | get name
+    ls -D $"($CONFIG_PATH)/*" | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
 }
 
 # Repo to act on: --host wins; otherwise resolved from the current directory.
