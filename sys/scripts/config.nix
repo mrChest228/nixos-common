@@ -50,13 +50,16 @@ in {
                 "${commands.config-pull}/bin/config-pull --quiet"
                 "${commands.config-push}/bin/config-push --quiet"
             ];
+            CPUSchedulingPolicy = "idle";
+            IOSchedulingClass = "idle";
         };
     };
     systemd.timers.config-sync = {
         wantedBy = [ "timers.target" ];
         timerConfig = {
-            OnBootSec = "5min";
-            OnUnitActiveSec = "30min";
+            OnBootSec = "2min";
+            OnUnitActiveSec = "2min";
+            AccuracySec = "1m";
         };
     };
     networking.networkmanager.dispatcherScripts = lib.mkIf config.networking.networkmanager.enable [{
