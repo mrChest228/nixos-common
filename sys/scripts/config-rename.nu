@@ -20,9 +20,6 @@ def main [message: string, --host: string, --single(-s)] {
     } else {
         print $"Will be renamed only in ($target | path basename)"
     }
-    if not ($old | str starts-with $"($HOST): ") {
-        print $"(ansi yellow)Last commit name doesn't start with \"($HOST): \"(ansi rst)"
-    }
     let reply = (input "Rename? [Y/n]: " | str lowercase)
     if not ($reply == "" or $reply == "y" or $reply == "ye" or $reply == "yes") {
         return
