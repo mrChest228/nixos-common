@@ -39,9 +39,16 @@ in {
     systemd.tmpfiles.rules = [
         "Z ${vars.configPath} - root root -"
     ] ++ (builtins.concatMap (repo: [
-        "z ${vars.configPath}/${repo}/hm - ${firstUser} users -"
-        "z ${vars.configPath}/${repo}/hm/*.nix - ${firstUser} users -"
+        "Z ${vars.configPath}/${repo}/hm - ${firstUser} users -"
     ] ++ (builtins.map (user: "Z ${vars.configPath}/${repo}/hm/${user} - ${user} users -") vars.users)) [ "common" vars.host ]);
+    systemd.services.config-permissions = {
+        wantedBy = [ "multi-user.target" ];
+        restartTriggers = config.systemd.tmpfiles.rules;
+        serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.systemd}/bin/systemd-tmpfiles --create --prefix ${vars.configPath}";
+        };
+    };
     systemd.services.config-sync = {
         path = [ pkgs.bash pkgs.coreutils pkgs.git pkgs.nix pkgs.nushell pkgs.openssh pkgs.systemd pkgs.util-linux ];
         serviceConfig = {
