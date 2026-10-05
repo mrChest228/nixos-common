@@ -21,6 +21,7 @@ def main [message?: string, --host: string, --all(-a), --single(-s)] {
     let repos = if $all { hostRepos } else { [ $target ] }
     for repo in $repos {
         repoSync $repo --pause
+        # re-lock only when common's HEAD actually moved
         if not $single and (lockedRev $repo) != (gitSafe $common rev-parse HEAD | complete | get stdout | str trim) {
             updateCommonLock $repo
         }

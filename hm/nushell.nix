@@ -56,7 +56,7 @@
                 let bootedGen = (readlink -f /run/current-system)
                 let prvGen = (readlink -f /nix/var/nix/profiles/system)
 
-                nh os boot # Apply the changes after the reboot to a new generation
+                nh os boot # Apply the changes after the reboot to a new generation; config-permissions re-applies hm owners at boot
                 nh home switch
 
                 let newGen = (readlink -f /nix/var/nix/profiles/system)
@@ -78,6 +78,7 @@
                 let bootedGen = (readlink -f /run/current-system)
                 let prvGen = (readlink -f /nix/var/nix/profiles/system)
 
+                # config-permissions restarts on switch when the tmpfiles rules changed (e.g. vars.users), re-applying hm owners
                 nh os switch
 
                 let newGen = (readlink -f /nix/var/nix/profiles/system)

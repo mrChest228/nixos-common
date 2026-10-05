@@ -10,13 +10,14 @@ let
         export const NOTIFY_SEND = "${pkgs.libnotify}/bin/notify-send"
     '';
     configLib = pkgs.writeText "config-lib.nu" (consts + builtins.readFile ./lib.nu);
-    # real script: does the work, expects root
+    # real script lives in the store: sudoers can only point at files users can't edit
     mkImpl = name: pkgs.writeScript "${name}-impl" ''
         #!${pkgs.nushell}/bin/nu
         use ${configLib} *
         ${builtins.readFile ./${name}.nu}
     '';
     # public command: root -> flock + impl; otherwise re-run itself through sudo
+    # the flock serializes whole runs; git's own index.lock only covers single ops
     mkCommand = name: pkgs.writeScriptBin name ''
         #!${pkgs.nushell}/bin/nu
         def --wrapped main [...args: string] {
@@ -36,11 +37,13 @@ in {
         groups = [ "wheel" ];
         commands = map (name: { command = "${commands.${name}}/bin/${name}"; options = [ "NOPASSWD" ]; }) names;
     }];
+    # rule order: root takes everything first, then hm goes to the first user (covers unknown/renamed user dirs), then each user takes their own dir
     systemd.tmpfiles.rules = [
         "Z ${vars.configPath} - root root -"
     ] ++ (builtins.concatMap (repo: [
         "Z ${vars.configPath}/${repo}/hm - ${firstUser} users -"
     ] ++ (builtins.map (user: "Z ${vars.configPath}/${repo}/hm/${user} - ${user} users -") vars.users)) [ "common" vars.host ]);
+    # tmpfiles-setup runs only at boot; this reruns on every switch where the rules changed
     systemd.services.config-permissions = {
         wantedBy = [ "multi-user.target" ];
         restartTriggers = config.systemd.tmpfiles.rules;
@@ -57,6 +60,7 @@ in {
                 "${commands.config-pull}/bin/config-pull --quiet"
                 "${commands.config-push}/bin/config-push --quiet"
             ];
+            # syncing never delays real work
             CPUSchedulingPolicy = "idle";
             IOSchedulingClass = "idle";
         };
@@ -66,9 +70,11 @@ in {
         timerConfig = {
             OnBootSec = "2min";
             OnUnitActiveSec = "2min";
+            # no WakeSystem: a suspended laptop is not woken for syncing
             AccuracySec = "1m";
         };
     };
+    # NetworkManager fires this on every "up" (boot, wifi, ethernet, usb); the service then pulls and pushes
     networking.networkmanager.dispatcherScripts = lib.mkIf config.networking.networkmanager.enable [{
         type = "basic";
         source = pkgs.writeScript "config-sync-dispatcher" ''

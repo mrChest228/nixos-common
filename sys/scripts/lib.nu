@@ -17,7 +17,7 @@ export def --env silent [action: closure] {
     )
 }
 
-# All git calls go through this: hooks and fsmonitor are disabled, and the deploy key is used for SSH remotes.
+# All git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes.
 export def --wrapped gitSafe [repo: string, ...args: string] {
     ^git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c $"core.sshCommand=($SSH_COMMAND)" ...$args
 }
@@ -78,6 +78,7 @@ export def repoSync [repo: string, --pause] {
     if $pause and ($fetchHead | path exists) and (((date now) - (ls -D $fetchHead | get 0 | get modified)) < $PULL_PAUSE) {
         return { online: true, changed: false }
     }
+    # fetch fails on network errors, rebase fails on conflicts; separate calls tell the two apart
     let fetch = (gitSafe $repo fetch origin main | complete)
     if $fetch.exit_code != 0 {
         if (isNetworkError $fetch.stderr) {
@@ -116,6 +117,7 @@ export def repoPush [repo: string, --no-retry] {
     mut res = (gitSafe $repo push --force-with-lease origin HEAD:main | complete)
     if $res.exit_code != 0 {
         if (isNetworkError $res.stderr) {
+            # offline: keep the commit local, the timer or a later push sends it
             print ((ansi yellow) + $repo + ": not pushed (offline), will be pushed later" + (ansi rst))
             return false
         }
@@ -228,7 +230,7 @@ export def reportProblem [repo: string, text: string, --quiet] {
     }
 }
 
-# Restores ownership under $CONFIG_PATH via the tmpfiles Z-rules from this module
+# Git runs here as root, so pulled/created files are root-owned; re-apply the tmpfiles Z-rules to fix ownership under $CONFIG_PATH
 export def fixPermissions [] {
     ^systemd-tmpfiles --create --prefix $CONFIG_PATH
 }
