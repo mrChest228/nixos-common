@@ -10,14 +10,31 @@
                 let hm = $"($repo)/hm"
                 if ($hm | path exists) {
                     ^find $repo -path $hm -prune -o ! -user root -exec chown -h root {} +
-                    if ((^stat -c %U $hm | complete).stdout | str trim) != $firstUser { ^chown -h $firstUser $hm }
+                    # hm belongs to root (1755) with an ACL for the first user; the sticky bit stops anyone
+                    # from renaming hm/root — `mv hm/root x; mkdir hm/root` would feed root someone else's
+                    # code on the next passwordless reconf. The ACL's mask shows up as group bits in stat
+                    # (hm looks 1775), so hm is excluded from the chmod steps below.
+                    if ((^stat -c %U $hm | complete).stdout | str trim) != "root" { ^chown root $hm }
+                    if not (((^stat -c %a $hm | complete).stdout | str trim) in [ "1755" "1775" ]) { ^chmod 1755 $hm }
+                    let wantAcl = [ "user::rwx" $"user:($firstUser):rwx" "group::r-x" "mask::rwx" "other::r-x" ] | str join "\n"
+                    if ((^${pkgs.acl}/bin/getfacl -cp $hm | complete).stdout | str trim) != $wantAcl {
+                        ^${pkgs.acl}/bin/setfacl -bm mask::rwx $"u:($firstUser):rwx" $hm
+                    }
                     for dir in (^find $hm -mindepth 1 -maxdepth 1 -type d | lines) {
                         let name = ($dir | path basename)
-                        # the root HM imports only hm/root, which is root-owned: files root evaluates must not
-                        # be user-writable because update/reconf run without a password — that would be a
-                        # passwordless path to root. Users may import from hm/root: reading root's files is safe.
-                        let owner = if $name == "root" { "root" } else if ($users | any { |u| $u == $name }) { $name } else { $firstUser }
-                        ^find $dir ! -user $owner -exec chown -h $owner {} +
+                        if $name == "root" {
+                            # files root evaluates must not be user-writable: update/reconf run without a
+                            # password, that would be a passwordless path to root. Never chowned here —
+                            # a stray user-owned hm/root is reported instead of silently adopted.
+                            if ((^stat -c %U $dir | complete).stdout | str trim) == "root" {
+                                ^find $dir ! -user root -exec chown -h root {} +
+                            } else {
+                                print $"(ansi red)hm/root in ($repo) is not owned by root: check its contents and chown it yourself(ansi rst)"
+                            }
+                        } else {
+                            let owner = if ($users | any { |u| $u == $name }) { $name } else { $firstUser }
+                            ^find $dir ! -user $owner -exec chown -h $owner {} +
+                        }
                     }
                     ^find $hm -mindepth 1 -maxdepth 1 ! -type d ! -user $firstUser -exec chown -h $firstUser {} +
                 } else {
@@ -25,16 +42,17 @@
                 }
                 # modes: readable by all (dirs need +x to enter), executable stays as git has it,
                 # write only by the owner, no setuid/setgid
-                ^find $repo ! -type l -perm /022 -exec chmod go-w {} +
-                ^find $repo ! -type l -perm /6000 -exec chmod ug-s {} +
-                ^find $repo -type d ! -perm -555 -exec chmod a+rx {} +
-                ^find $repo -type f ! -perm -444 -exec chmod a+r {} +
+                ^find $repo ! -type l ! -path $hm -perm /022 -exec chmod go-w {} +
+                ^find $repo ! -type l ! -path $hm -perm /6000 -exec chmod ug-s {} +
+                ^find $repo -type d ! -path $hm ! -perm -555 -exec chmod a+rx {} +
+                ^find $repo -type f ! -path $hm ! -perm -444 -exec chmod a+r {} +
             }
         }
     '';
     systemd.services.conf-perms = {
         description = "Fix ownership and modes of config repos";
         wantedBy = [ "multi-user.target" ];
+        path = [ pkgs.acl pkgs.coreutils pkgs.findutils pkgs.nushell pkgs.util-linux ];
         serviceConfig = {
             Type = "oneshot";
             ExecStart = "${config.config-scripts.packages.conf}/bin/conf perms";

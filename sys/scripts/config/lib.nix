@@ -42,9 +42,27 @@ in {
                 try { ^${config.config-scripts.packages."conf-impl"} commit $msg }
             }
         }
+        # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates
+        # these files and the switch runs without a password — a user-writable or ACL'd hm/root is a
+        # passwordless path to root. If a check fails, only root's switch is skipped.
+        def rootHmSafe [] {
+            [ "${vars.configPath}/common/hm/root" "${vars.configPath}/${vars.host}/hm/root" ]
+            | all { |d|
+                if not ($d | path exists) { true } else {
+                    let ownerOk = ((^find $d -maxdepth 0 ! -user root | complete).stdout | is-empty)
+                    let writeOk = ((^find $d -maxdepth 0 -perm /022 | complete).stdout | is-empty)
+                    let aclOk = ((^${pkgs.acl}/bin/getfacl -cp $d | complete).stdout | lines | where { |l| not ($l =~ '^(user|group|other|mask)::') } | is-empty)
+                    $ownerOk and $writeOk and $aclOk
+                }
+            }
+        }
         def homeSwitchAll [] {
             # runuser from root asks no password; sudo env_reset drops NH_FLAKE, hence the explicit flake path
-            with-env { HOME: "/root" } { ^nh home switch ${vars.configPath}/cur -c "root@${vars.host}" }
+            if (rootHmSafe) {
+                with-env { HOME: "/root" } { ^nh home switch ${vars.configPath}/cur -c "root@${vars.host}" }
+            } else {
+                print $"(ansi red)hm/root is not owned and permissioned for root; skipping root's home switch(ansi rst)"
+            }
             for u in [ ${usersNu} ] {
                 if ((^id -u $u | complete).exit_code != 0) {
                     print $"(ansi yellow)($u): no such user yet, skipping home switch(ansi rst)"
