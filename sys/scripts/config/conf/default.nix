@@ -1,5 +1,5 @@
 { config, lib, com, pkgs, vars, self, ... }: {
-    imports = [ ../lib.nix ./lib.nix ./commit.nix ./rename.nix ./pull.nix ./push.nix ./perms.nix ];
+    imports = [ ../lib.nix ./lib.nix ./commit.nix ./rename.nix ./pull.nix ./push.nix ./perms.nix ./sync.nix ];
     options.conf = {
         lib = lib.mkOption { type = lib.types.lines; internal = true; default = ""; };
         subcommands = lib.mkOption { type = lib.types.attrsOf lib.types.lines; internal = true; default = { }; };
