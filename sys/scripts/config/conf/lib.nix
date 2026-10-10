@@ -6,7 +6,7 @@
         }
         # all host repos in ${vars.configPath} (git repos other than common; the cur mount is not a separate repo)
         def hostRepos [] {
-            ls -D $"${vars.configPath}/*" | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
+            ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
         }
         # repo to act on: --host wins; otherwise resolved from the current directory
         # cur and /home/<user>/cfg both resolve to this host's repo; outside a git dir defaults to the host repo too
