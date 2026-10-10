@@ -84,27 +84,9 @@
                 gen clean
             }
 
-            def "gen del" [...ids: string] {
-                nudo nix-env --profile /nix/var/nix/profiles/system --delete-generations ...$ids
-                nudo /run/current-system/bin/switch-to-configuration boot
-            }
-            def "gen switch" [id: any] {
-                nudo $"/nix/var/nix/profiles/system-($id)-link/bin/switch-to-configuration" switch
-            }
-            def "gen clean" [] {
-                nh clean all --keep 3 --keep-since 3d --nogc --nogcroots
-                nudo /run/current-system/bin/switch-to-configuration boot
-            }
-            def clean [] {
-                nh clean all --keep 3 --keep-since 3d --optimise
-                sudo /run/current-system/bin/switch-to-configuration boot # Update bootloade
-            }
         '';
         shellAliases = {
             tp = "trash-put";
-
-            "gen list" = "nh os info";
-            "gen-ls" = "nixos-rebuild list-generations";
         };
     };
 }
