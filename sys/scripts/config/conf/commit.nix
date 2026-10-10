@@ -2,6 +2,7 @@
     conf.subcommands.commit = ''
         # Usage: conf commit [message] [--host (-h) <host>] [--all (-a)] [--single (-s)]
         def "main commit" [message?: string, --host(-h): string, --all(-a), --single(-s)] {
+            checkNoForeign
             if $all and $single {
                 error make { msg: "--all and --single can't be used together" }
             }

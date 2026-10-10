@@ -2,6 +2,7 @@
     conf.subcommands.rename = ''
         # Usage: conf rename <message> [--host (-h) <host>] [--single (-s)]
         def "main rename" [message: string, --host(-h): string, --single(-s)] {
+            checkNoForeign
             let target = (currentRepo $host)
             let common = "${vars.configPath}/common"
             let newMsg = (buildMessage $message)

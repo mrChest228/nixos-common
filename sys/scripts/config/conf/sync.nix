@@ -1,7 +1,7 @@
 { config, lib, com, pkgs, vars, self, ... }: {
     systemd.services.conf-sync = {
         description = "Pull and push the config repos";
-        path = [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.git pkgs.nix pkgs.nushell pkgs.openssh pkgs.systemd pkgs.util-linux ];
+        path = [ pkgs.acl pkgs.bash pkgs.coreutils pkgs.findutils pkgs.git pkgs.nix pkgs.nushell pkgs.openssh pkgs.systemd pkgs.util-linux ];
         serviceConfig = {
             Type = "oneshot";
             ExecStart = [

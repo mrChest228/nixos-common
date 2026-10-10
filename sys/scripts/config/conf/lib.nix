@@ -1,5 +1,6 @@
 { config, lib, com, pkgs, vars, self, ... }: {
     conf.lib = ''
+        ${config.config-scripts.commonNu}
         # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
         def --wrapped gitSafe [repo: string, ...args: string] {
             ^git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
@@ -185,16 +186,6 @@
         # commit message format: "<HOST>: <message>" (or "Commit <date>" when no message is given)
         def buildMessage [message?: string] {
             $"${vars.host}: " + if ($message | is-empty) { $"Commit (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }
-        }
-        # always prints the error in red; in --quiet (service) mode also logs to the journal and notifies the first user
-        def reportProblem [repo: string, text: string, --quiet] {
-            print -e $"(ansi red)($repo): ($text)(ansi rst)"
-            if $quiet {
-                ^logger -t nixos-config $"($repo): ($text)"
-                try {
-                    ^systemd-run --quiet --machine=$"${builtins.head vars.users}@.host" --user ${pkgs.libnotify}/bin/notify-send -u critical "NixOS config" $text
-                } catch { }
-            }
         }
     '';
 }

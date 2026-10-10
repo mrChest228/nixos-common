@@ -5,6 +5,7 @@
             cmd = config.config-scripts.mkRootCommand "update" ''
                 ${config.config-scripts.nuLib}
                 def main [message?: string] {
+                    checkNoForeign
                     cd ${vars.configPath}/cur
                     ^nix flake update
                     commitIfChanged "Update" $message

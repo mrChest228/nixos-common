@@ -31,9 +31,56 @@ in {
                 };
         };
         packages = lib.mkOption { type = lib.types.attrsOf lib.types.package; internal = true; default = { }; };
+        commonNu = lib.mkOption { type = lib.types.lines; internal = true; default = ""; };
         nuLib = lib.mkOption { type = lib.types.lines; internal = true; default = ""; };
     };
+    config.config-scripts.commonNu = ''
+        # always prints the error in red; with --quiet (service) also logs to the journal and notifies the first user
+        def reportProblem [repo: string, text: string, --quiet] {
+            print -e $"(ansi red)($repo): ($text)(ansi rst)"
+            if $quiet {
+                ^logger -t nixos-config $"($repo): ($text)"
+                try {
+                    ^systemd-run --quiet --machine=$"${builtins.head vars.users}@.host" --user ${pkgs.libnotify}/bin/notify-send -u critical "NixOS config" $text
+                } catch { }
+            }
+        }
+        # direct subdirs of hm whose owner is none of {root, first user, expected owner} are foreign:
+        # never chown/chmod them (perms) and refuse to run anything else while they exist —
+        # a stray owned-by-someone dir under hm can become code root evaluates after a passwordless reconf
+        def foreignHmDirs [] {
+            let firstUser = "${builtins.head vars.users}"
+            let users = [ ${usersNu} ]
+            mut bad = []
+            for repo in (ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name) {
+                let hm = $"($repo)/hm"
+                if not ($hm | path exists) { continue }
+                for dir in (^find $hm -mindepth 1 -maxdepth 1 -type d | lines) {
+                    let name = ($dir | path basename)
+                    let owner = ((^stat -c %U $dir | complete).stdout | str trim)
+                    let allowed = if $name == "root" {
+                        [ "root" ]
+                    } else if ($users | any { |u| $u == $name }) {
+                        [ "root" $firstUser $name ]
+                    } else {
+                        [ "root" $firstUser ]
+                    }
+                    if not ($allowed | any { |o| $o == $owner }) { $bad = ($bad | append $dir) }
+                }
+            }
+            $bad
+        }
+        # foreign dirs always go to the journal and the first user's notifications, not only in --quiet
+        def checkNoForeign [] {
+            let foreign = (foreignHmDirs)
+            for d in $foreign {
+                reportProblem "conf" $"foreign hm dir ($d): fix its owner and run conf perms" --quiet
+            }
+            if ($foreign | is-not-empty) { exit 1 }
+        }
+    '';
     config.config-scripts.nuLib = ''
+        ${config.config-scripts.commonNu}
         def commitIfChanged [prefix: string, message?: string] {
             let dirty = (not ((^git -C ${vars.configPath}/cur -c core.fsmonitor=false status --porcelain | complete).stdout | is-empty))
             if $dirty or ($message | is-not-empty) {

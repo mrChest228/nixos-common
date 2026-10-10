@@ -5,6 +5,7 @@
             cmd = config.config-scripts.mkRootCommand "rebuild" ''
                 ${config.config-scripts.nuLib}
                 def main [message?: string] {
+                    checkNoForeign
                     commitIfChanged "Rebuild" $message
                     let bootedGen = ((^readlink -f /run/current-system | complete).stdout | str trim)
                     let lstGen = ((^readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)

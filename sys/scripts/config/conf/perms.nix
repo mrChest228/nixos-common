@@ -6,6 +6,8 @@
         def "main perms" [] {
             let firstUser = "${builtins.head vars.users}"
             let users = [ ${lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users} ]
+            let foreign = (foreignHmDirs)
+            let prunes = ($foreign | each { |d| [ "-path" $d "-prune" "-o" ] } | flatten)
             for repo in ([ "${vars.configPath}/common" ] ++ (hostRepos)) {
                 let hm = $"($repo)/hm"
                 if ($hm | path exists) {
@@ -21,32 +23,28 @@
                         ^${pkgs.acl}/bin/setfacl -bm mask::rwx $"u:($firstUser):rwx" $hm
                     }
                     for dir in (^find $hm -mindepth 1 -maxdepth 1 -type d | lines) {
+                        if ($foreign | any { |d| $d == $dir }) { continue }
                         let name = ($dir | path basename)
-                        if $name == "root" {
-                            # files root evaluates must not be user-writable: update/reconf run without a
-                            # password, that would be a passwordless path to root. Never chowned here —
-                            # a stray user-owned hm/root is reported instead of silently adopted.
-                            if ((^stat -c %U $dir | complete).stdout | str trim) == "root" {
-                                ^find $dir ! -user root -exec chown -h root {} +
-                            } else {
-                                print $"(ansi red)hm/root in ($repo) is not owned by root: check its contents and chown it yourself(ansi rst)"
-                            }
-                        } else {
-                            let owner = if ($users | any { |u| $u == $name }) { $name } else { $firstUser }
-                            ^find $dir ! -user $owner -exec chown -h $owner {} +
-                        }
+                        # files root evaluates must not be user-writable: update/reconf run without a
+                        # password, that would be a passwordless path to root
+                        let owner = if $name == "root" { "root" } else if ($users | any { |u| $u == $name }) { $name } else { $firstUser }
+                        ^find $dir ! -user $owner -exec chown -h $owner {} +
                     }
                     ^find $hm -mindepth 1 -maxdepth 1 ! -type d ! -user $firstUser -exec chown -h $firstUser {} +
                 } else {
                     ^find $repo ! -user root -exec chown -h root {} +
                 }
                 # modes: readable by all (dirs need +x to enter), executable stays as git has it,
-                # write only by the owner, no setuid/setgid
-                ^find $repo ! -type l ! -path $hm -perm /022 -exec chmod go-w {} +
-                ^find $repo ! -type l ! -path $hm -perm /6000 -exec chmod ug-s {} +
-                ^find $repo -type d ! -path $hm ! -perm -555 -exec chmod a+rx {} +
-                ^find $repo -type f ! -path $hm ! -perm -444 -exec chmod a+r {} +
+                # write only by the owner, no setuid/setgid (foreign dirs are pruned: never touched)
+                ^find $repo ...$prunes ! -type l ! -path $hm -perm /022 -exec chmod go-w {} +
+                ^find $repo ...$prunes ! -type l ! -path $hm -perm /6000 -exec chmod ug-s {} +
+                ^find $repo ...$prunes -type d ! -path $hm ! -perm -555 -exec chmod a+rx {} +
+                ^find $repo ...$prunes -type f ! -path $hm ! -perm -444 -exec chmod a+r {} +
             }
+            for d in $foreign {
+                reportProblem "conf perms" $"foreign hm dir ($d): fix its owner and run conf perms again" --quiet
+            }
+            if ($foreign | is-not-empty) { exit 1 }
         }
     '';
     systemd.services.conf-perms = {

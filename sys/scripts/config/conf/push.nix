@@ -2,6 +2,7 @@
     conf.subcommands.push = ''
         # Usage: conf push [--host (-h) <host>] [--quiet (-q)]
         def "main push" [--host(-h): string, --quiet(-q)] {
+            checkNoForeign
             let repos = if ($host | is-not-empty) { [ $"${vars.configPath}/($host)" ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }
             mut ok = true
             for repo in $repos {

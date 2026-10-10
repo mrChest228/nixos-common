@@ -5,6 +5,7 @@
             cmd = config.config-scripts.mkRootCommand "reconf" ''
                 ${config.config-scripts.nuLib}
                 def main [] {
+                    checkNoForeign
                     commitIfChanged "Reconf"
                     homeSwitchAll
                     ^${config.config-scripts.packages.gen}/bin/gen clean
