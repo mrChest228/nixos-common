@@ -29,61 +29,6 @@
 
                 sudo nu --config /home/${vars.user}/.config/nushell/config.nu --env-config /home/${vars.user}/.config/nushell/env.nu -c $cmd
             }
-            def update [message?: string] {
-                cd ${vars.configPath}/cur
-                nudo nix flake update
-                if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
-                    try { config-commit (if ($message | is-empty) { $"Update (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
-                }
-
-                let bootedGen = (readlink -f /run/current-system)
-                let prvGen = (readlink -f /nix/var/nix/profiles/system)
-
-                nh os boot # Apply the changes after the reboot to a new generation; config-permissions re-applies hm owners at boot
-                nh home switch
-
-                let newGen = (readlink -f /nix/var/nix/profiles/system)
-                if (($prvGen != $bootedGen) and ($prvGen != $newGen)) {
-                    let prvLinks = ((nudo ls -l /nix/var/nix/profiles/system-*-link) | where target == $prvGen)
-                    if (($prvLinks | length) == 1) {
-                        gen del ($prvLinks.0.name | str replace -a -r '\D' ''')
-                    }
-                }
-
-                gen clean
-            }
-            def rebuild [message?: string] {
-                cd ${vars.configPath}/cur
-                if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
-                    try { config-commit (if ($message | is-empty) { $"Rebuild (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
-                }
-
-                let bootedGen = (readlink -f /run/current-system)
-                let prvGen = (readlink -f /nix/var/nix/profiles/system)
-
-                # config-permissions restarts on switch when the tmpfiles rules changed (e.g. vars.users), re-applying hm owners
-                nh os switch
-
-                let newGen = (readlink -f /nix/var/nix/profiles/system)
-                if (($prvGen != $bootedGen) and ($prvGen != $newGen)) {
-                    let prvLinks = ((nudo ls -l /nix/var/nix/profiles/system-*-link) | where target == $prvGen)
-                    if (($prvLinks | length) == 1) {
-                        gen del ($prvLinks.0.name | str replace -a -r '\D' ''')
-                    }
-                }
-
-                gen clean
-            }
-            def reconf [message?: string] {
-                cd ${vars.configPath}/cur
-                if (not ((git status -s) | is-empty) or not ($message | is-empty)) {
-                    try { config-commit (if ($message | is-empty) { $"Reconf (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }) }
-                }
-                nh home switch
-
-                gen clean
-            }
-
         '';
         shellAliases = {
             tp = "trash-put";
