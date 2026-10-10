@@ -186,10 +186,6 @@
         def buildMessage [message?: string] {
             $"${vars.host}: " + if ($message | is-empty) { $"Commit (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }
         }
-        # git runs here as root, so pulled/created files are root-owned; re-apply the tmpfiles Z-rules to fix ownership under ${vars.configPath}
-        def fixPermissions [] {
-            ^systemd-tmpfiles --create --prefix ${vars.configPath}
-        }
         # always prints the error in red; in --quiet (service) mode also logs to the journal and notifies the first user
         def reportProblem [repo: string, text: string, --quiet] {
             print -e $"(ansi red)($repo): ($text)(ansi rst)"

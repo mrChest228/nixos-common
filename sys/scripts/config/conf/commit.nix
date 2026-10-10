@@ -16,7 +16,7 @@
             }
 
             if $target == $common {
-                fixPermissions
+                main perms
                 return
             }
 
@@ -30,7 +30,7 @@
                 commitRepo $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg })
                 repoPush $repo
             }
-            fixPermissions
+            main perms
         }
     '';
 }

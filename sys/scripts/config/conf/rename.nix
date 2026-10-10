@@ -55,7 +55,7 @@
                 silent { gitSafe $target commit --amend --allow-empty -m $newMsg }
                 repoPush $target --no-retry
             }
-            fixPermissions
+            main perms
         }
     '';
 }

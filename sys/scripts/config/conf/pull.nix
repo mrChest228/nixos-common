@@ -20,7 +20,7 @@
                     break
                 }
             }
-            fixPermissions
+            main perms
             if not $ok {
                 exit 1
             }
