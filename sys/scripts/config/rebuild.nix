@@ -1,5 +1,5 @@
 { config, lib, com, pkgs, vars, self, ... }: {
-    imports = [ ./lib.nix ./conf ./gen.nix ];
+    imports = [ ./lib.nix ./conf/default.nix ./gen.nix ];
     config =
         let
             cmd = config.config-scripts.mkRootCommand "rebuild" ''
