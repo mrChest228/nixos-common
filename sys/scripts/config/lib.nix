@@ -41,7 +41,7 @@ in {
             if $quiet {
                 ^logger -t nixos-config $"($repo): ($text)"
                 try {
-                    ^systemd-run --quiet --machine=$"${builtins.head vars.users}@.host" --user ${pkgs.libnotify}/bin/notify-send -u critical "NixOS config" $text
+                    ^systemd-run --quiet --machine $"${builtins.head vars.users}@.host" --user ${pkgs.libnotify}/bin/notify-send -u critical "NixOS config" $text
                 } catch { }
             }
         }
