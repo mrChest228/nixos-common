@@ -9,6 +9,7 @@
             let foreign = (foreignHmDirs)
             let prunes = ($foreign | each { |d| [ "-path" $d "-prune" "-o" ] } | flatten)
             for repo in ([ "${vars.configPath}/common" ] ++ (hostRepos)) {
+                if not ($repo | path exists) { continue }  # first boot: repos may not exist yet
                 let hm = $"($repo)/hm"
                 if ($hm | path exists) {
                     ^find $repo -path $hm -prune -o ! -user root -exec chown -h root {} +
@@ -20,7 +21,7 @@
                     if not (((^stat -c %a $hm | complete).stdout | str trim) in [ "1755" "1775" ]) { ^chmod 1755 $hm }
                     let wantAcl = [ "user::rwx" $"user:($firstUser):rwx" "group::r-x" "mask::rwx" "other::r-x" ] | str join "\n"
                     if ((^${pkgs.acl}/bin/getfacl -cp $hm | complete).stdout | str trim) != $wantAcl {
-                        ^${pkgs.acl}/bin/setfacl -bm mask::rwx $"u:($firstUser):rwx" $hm
+                        ^${pkgs.acl}/bin/setfacl -b -m $"mask::rwx,u:($firstUser):rwx" $hm
                     }
                     for dir in (^find $hm -mindepth 1 -maxdepth 1 -type d | lines) {
                         if ($foreign | any { |d| $d == $dir }) { continue }
