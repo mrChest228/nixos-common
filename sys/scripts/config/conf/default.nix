@@ -15,7 +15,7 @@
         in {
             config-scripts.packages.conf = conf.command;
             config-scripts.packages."conf-impl" = conf.impl;
-            environment.systemPackages = [ conf.command pkgs.nushell ];
+            environment.systemPackages = [ conf.command ];
             environment.etc."nixos/conf".source = "${conf.command}/bin/conf";
             security.sudo.extraRules = [{
                 groups = [ "wheel" ];
