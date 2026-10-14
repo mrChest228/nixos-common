@@ -1,9 +1,9 @@
 { vars }:
 ''
-        # Usage: conf pull [--host (-h) <host>] [--quiet (-q)]
+        # Usage: conf pull [--host (-h) <host|cur|com>] [--quiet (-q)]
         def "main pull" [--host(-h): string, --quiet(-q)] {
             checkNoForeign
-            let repos = if ($host | is-not-empty) { [ $"${vars.configPath}/($host)" ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }
+            let repos = if ($host | is-not-empty) { [ (hostRepo $host) ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }
             mut ok = true
             for repo in $repos {
                 let res = (try {

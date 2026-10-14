@@ -4,15 +4,20 @@
         def hostRepos [] {
             ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
         }
+        # --host aliases: `cur` is this host's repo, `com`/`common` the common one; else a repo name under the config dir
+        def hostRepo [host: string] {
+            let dir = (if $host == "cur" { "${vars.host}" } else if $host in [ "com" "common" ] { "common" } else { $host })
+            let repo = $"${vars.configPath}/($dir)"
+            if not ($"($repo)/.git" | path exists) {
+                error make { msg: $"($repo) is not a config repo" }
+            }
+            $repo
+        }
         # repo to act on: --host wins; otherwise resolved by walking up from PWD and comparing device+inode,
         # so a bind mount (e.g. ~/cfg bound to another host repo) resolves to the real repo; fallback is the host repo
         def currentRepo [host?: string] {
             if ($host | is-not-empty) {
-                let repo = $"${vars.configPath}/(if $host == "cur" { "${vars.host}" } else { $host })"
-                if not ($"($repo)/.git" | path exists) {
-                    error make { msg: $"($repo) is not a config repo" }
-                }
-                return $repo
+                return (hostRepo $host)
             }
             let repos = ([ $"${vars.configPath}/common" ] ++ (hostRepos))
             # stat -L follows symlinks: device:inode of the dir itself
