@@ -1,5 +1,5 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
-    conf.subcommands.push = ''
+{ vars }:
+''
         # Usage: conf push [--host (-h) <host>] [--quiet (-q)]
         def "main push" [--host(-h): string, --quiet(-q)] {
             checkNoForeign
@@ -39,7 +39,4 @@
             main perms
             if not $ok {
                 exit 1
-            }
-        }
-    '';
-}
+''

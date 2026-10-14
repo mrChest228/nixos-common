@@ -1,44 +1,34 @@
-{ config, lib, com, pkgs, vars, self, ... }:
+{ lib, pkgs, vars }:
 let
     usersNu = lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users;
     # sudo keeps the caller's PATH on NixOS, so every external the root impl runs must come from a fixed
     # list: a fake git/nh earlier in the user's PATH would otherwise run as root
     binPath = lib.concatMapStringsSep " " (p: "\"${p}\"") ((lib.splitString ":" (lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.acl pkgs.nh ])) ++ [ "/run/wrappers/bin" "/run/current-system/sw/bin" ]);
-in {
-    options.config-scripts = {
-        mkRootCommand = lib.mkOption {
-            type = lib.types.raw;
-            readOnly = true;
-            default = name: text:
-                let
-                    # real script lives in the store: sudoers can only point at files users can't edit
-                    impl = pkgs.writeScript "${name}-impl" ''
-                        #!${pkgs.nushell}/bin/nu -n
-                        $env.PATH = [ ${binPath} ]
-                        use ${../../my-std.nu} *
-                        ${text}
-                    '';
-                in {
-                    inherit impl;
-                    # public command: root -> flock + impl; otherwise re-run itself through sudo
-                    # the flock serializes whole runs; git's own index.lock only covers single ops
-                    command = pkgs.writeScriptBin name ''
-                        #!${pkgs.nushell}/bin/nu -n
-                        def --wrapped main [...args: string] {
-                            if (is-admin) {
-                                exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args
-                            } else {
-                                exec sudo ($env.CURRENT_FILE | path expand) ...$args
-                            }
-                        }
-                    '';
-                };
-        };
-        packages = lib.mkOption { type = lib.types.attrsOf lib.types.package; internal = true; default = { }; };
-        commonNu = lib.mkOption { type = lib.types.lines; internal = true; default = ""; };
-        nuLib = lib.mkOption { type = lib.types.lines; internal = true; default = ""; };
-    };
-    config.config-scripts.commonNu = ''
+in rec {
+    inherit binPath;
+    mkRootCommand = name: text:
+        let
+            # real script lives in the store: sudoers can only point at files users can't edit
+            impl = pkgs.writeScript "${name}-impl" ''
+                #!${pkgs.nushell}/bin/nu -n
+                $env.PATH = [ ${binPath} ]
+                use ${../../my-std.nu} *
+                ${text}
+            '';
+            # public command: root -> flock + impl; otherwise re-run itself through sudo
+            # the flock serializes whole runs; git's own index.lock only covers single ops
+            command = pkgs.writeScriptBin name ''
+                #!${pkgs.nushell}/bin/nu -n
+                def --wrapped main [...args: string] {
+                    if (is-admin) {
+                        exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args
+                    } else {
+                        exec sudo ($env.CURRENT_FILE | path expand) ...$args
+                    }
+                }
+            '';
+        in { inherit impl command; };
+    commonNu = ''
         # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
         def --wrapped gitSafe [repo: string, ...args: string] {
             ^git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
@@ -87,15 +77,28 @@ in {
             if ($foreign | is-not-empty) { exit 1 }
         }
     '';
-    config.config-scripts.nuLib = ''
-        ${config.config-scripts.commonNu}
+    genNu = ''
+        def genDel [...ids: string] {
+            if not (is-admin) { error make { msg: "gen del needs root, run it with sudo" } }
+            ^nix-env --profile /nix/var/nix/profiles/system --delete-generations ...$ids
+            ^/run/current-system/bin/switch-to-configuration boot
+        }
+        def genClean [] {
+            if not (is-admin) { error make { msg: "gen clean needs root, run it with sudo" } }
+            ^nh clean all --keep 3 --keep-since 3d --nogc --nogcroots
+            ^/run/current-system/bin/switch-to-configuration boot
+        }
+    '';
+    nuLib = ''
+        ${commonNu}
+        ${genNu}
         def commitIfChanged [prefix: string, message?: string] {
             # status --porcelain is empty only when the worktree is clean
             let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
                 # the impl does the work as root; going through the wrapper would deadlock on the flock we hold
-                try { ^${config.config-scripts.packages."conf-impl"} commit $msg }
+                try { ^${conf.impl} commit $msg }
             }
         }
         # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates
@@ -137,8 +140,9 @@ in {
                 | where { |e| $e.type == "symlink" and ($e.name | path basename | str starts-with "system-") }
                 | where { |e| ((^readlink -f $e.name | complete).stdout | str trim) == $lstGen })
             if (($lstLinks | length) == 1) {
-                ^${config.config-scripts.packages.gen}/bin/gen del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
+                genDel ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
             }
         }
     '';
+    conf = import ./conf/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
 }

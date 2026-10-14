@@ -1,5 +1,5 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
-    conf.subcommands.rename = ''
+{ vars }:
+''
         # Usage: conf rename <message> [--host (-h) <host>] [--single (-s)]
         def "main rename" [message: string, --host(-h): string, --single(-s)] {
             checkNoForeign
@@ -58,6 +58,4 @@
                 repoPush $target --no-retry
             }
             main perms
-        }
-    '';
-}
+''

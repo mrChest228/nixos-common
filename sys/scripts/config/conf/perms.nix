@@ -1,5 +1,5 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
-    conf.subcommands.perms = ''
+{ lib, pkgs, vars }:
+''
         # Git runs here as root, so pulled/created files are root-owned; this fixes ownership under ${vars.configPath}.
         # Only wrong entries are touched: chown bumps ctime -> git rescans every file, and the path
         # unit below would retrigger itself forever.
@@ -47,19 +47,4 @@
             }
             if ($foreign | is-not-empty) { exit 1 }
         }
-    '';
-    systemd.services.conf-perms = {
-        description = "Fix ownership and modes of config repos";
-        wantedBy = [ "multi-user.target" ];
-        path = [ pkgs.acl pkgs.coreutils pkgs.findutils pkgs.nushell pkgs.util-linux ];
-        serviceConfig = {
-            Type = "oneshot";
-            ExecStart = "${config.config-scripts.packages.conf}/bin/conf perms";
-        };
-    };
-    # a root-created hm/<user> must be handed to that user; minimal-chown keeps this from retriggering itself
-    systemd.paths.conf-perms = {
-        wantedBy = [ "paths.target" ];
-        pathConfig.PathChanged = [ "${vars.configPath}/common/hm" "${vars.configPath}/${vars.host}/hm" ];
-    };
-}
+''

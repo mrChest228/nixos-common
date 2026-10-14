@@ -1,6 +1,5 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
-    conf.lib = ''
-        ${config.config-scripts.commonNu}
+{ vars }:
+''
         # all host repos in ${vars.configPath} (git repos other than common; the cur mount is not a separate repo)
         def hostRepos [] {
             ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
@@ -184,6 +183,4 @@
         # commit message format: "<HOST>: <message>" (or "Commit <date>" when no message is given)
         def buildMessage [message?: string] {
             $"${vars.host}: " + if ($message | is-empty) { $"Commit (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }
-        }
-    '';
-}
+''

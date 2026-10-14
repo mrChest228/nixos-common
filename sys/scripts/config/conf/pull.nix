@@ -1,5 +1,5 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
-    conf.subcommands.pull = ''
+{ vars }:
+''
         # Usage: conf pull [--host (-h) <host>] [--quiet (-q)]
         def "main pull" [--host(-h): string, --quiet(-q)] {
             checkNoForeign
@@ -24,7 +24,4 @@
             main perms
             if not $ok {
                 exit 1
-            }
-        }
-    '';
-}
+''

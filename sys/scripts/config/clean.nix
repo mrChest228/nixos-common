@@ -1,17 +1,15 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
-    imports = [ ./lib.nix ];
-    config =
-        let
-            clean = pkgs.writeScriptBin "clean" ''
-                #!${pkgs.nushell}/bin/nu -n
-                def main [] {
-                    if not (is-admin) { error make { msg: "clean needs root, run it with sudo" } }
-                    ^nh clean all --keep 3 --keep-since 3d --optimise
-                    ^/run/current-system/bin/switch-to-configuration boot
-                }
-            '';
-        in {
-            config-scripts.packages.clean = clean;
-            environment.systemPackages = [ clean ];
-        };
+{ config, lib, com, pkgs, vars, self, ... }:
+let
+    l = import ./lib.nix { inherit lib pkgs vars; };
+    clean = pkgs.writeScriptBin "clean" ''
+        #!${pkgs.nushell}/bin/nu -n
+        $env.PATH = [ ${l.binPath} ]
+        def main [] {
+            if not (is-admin) { error make { msg: "clean needs root, run it with sudo" } }
+            ^nh clean all --keep 3 --keep-since 3d --optimise
+            ^/run/current-system/bin/switch-to-configuration boot
+        }
+    '';
+in {
+    environment.systemPackages = [ clean ];
 }
