@@ -5,7 +5,7 @@ export def --wrapped nudo [...rest: string] {
     mut nwRest = ($rest | each { |s|
         if ($s | str contains " ") { $"\"($s)\"" } else { $s } # Adds " if argument contains spaces
     })
-    $nwRest.0 = ($nwRest.0 | str replace '^"|"$' '') # Remove " from the start and the end of command ("ls | to nuon", for example)
+    $nwRest.0 = ($nwRest.0 | str replace -a -r '^"|"$' '') # Remove " from the start and the end of command ("ls | to nuon", for example)
 
     let cmd = ($nwRest | str join " ")
 
