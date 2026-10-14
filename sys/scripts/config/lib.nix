@@ -3,7 +3,8 @@ let
     usersNu = lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users;
     # sudo keeps the caller's PATH on NixOS, so every external the root impl runs must come from a fixed
     # list: a fake git/nh earlier in the user's PATH would otherwise run as root
-    binPath = lib.concatMapStringsSep " " (p: "\"${p}\"") ((lib.splitString ":" (lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.acl pkgs.nh ])) ++ [ "/run/wrappers/bin" "/run/current-system/sw/bin" ]);
+    # sw/bin (system profile) goes first so a host may replace a tool system-wide
+    binPath = lib.concatMapStringsSep " " (p: "\"${p}\"") ([ "/run/wrappers/bin" "/run/current-system/sw/bin" ] ++ (lib.splitString ":" (lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.acl pkgs.nh ])));
 in rec {
     inherit binPath;
     mkRootCommand = name: text:
