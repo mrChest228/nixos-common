@@ -14,7 +14,7 @@
                 }
                 return $repo
             }
-            let repos = ([ "common" ] ++ (hostRepos)) | each { |r| $"${vars.configPath}/($r)" }
+            let repos = ([ $"${vars.configPath}/common" ] ++ (hostRepos))
             # stat -L follows symlinks: device:inode of the dir itself
             let repoIds = $repos | each { |r| (^stat -L -c '%d:%i' $r | complete | get stdout | str trim) }
             mut p = ($env.PWD | path expand)
