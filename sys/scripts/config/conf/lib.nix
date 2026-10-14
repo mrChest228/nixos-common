@@ -26,11 +26,11 @@
         }
         # refuses to touch a repo mid-rebase or on a detached HEAD
         def checkRepoState [repo: string] {
-            let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)
+            let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)  # .git dir path, relative to the repo
             if ($"($repo)/($gitDir)/rebase-merge" | path exists) or ($"($repo)/($gitDir)/rebase-apply" | path exists) {
                 error make { msg: $"($repo): rebase in progress, finish it first" }
             }
-            if (gitSafe $repo symbolic-ref -q HEAD | complete | get exit_code) != 0 {
+            if (gitSafe $repo symbolic-ref -q HEAD | complete | get exit_code) != 0 {  # fails on detached HEAD
                 error make { msg: $"($repo): detached HEAD" }
             }
         }
@@ -44,7 +44,8 @@
         # returns { online: bool, changed: bool }; with --pause skips the fetch if FETCH_HEAD is fresh
         def repoSync [repo: string, --pause] {
             checkRepoState $repo
-            let fetchHead = $"($repo)/.git/FETCH_HEAD"
+            let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)
+            let fetchHead = $"($repo)/($gitDir)/FETCH_HEAD"
             if $pause and ($fetchHead | path exists) and (((date now) - (ls -D $fetchHead | get 0 | get modified)) < 3min) {
                 return { online: true, changed: false }
             }
@@ -56,13 +57,13 @@
                 }
                 error make { msg: $"($repo): fetch failed\n($fetch.stderr)" }
             }
-            let oldHead = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
+            let oldHead = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)  # hash of the current commit
             # files changed only by mtime make --autostash bail out; refresh the index stat info first (nonzero when real changes exist)
             try { gitSafe $repo update-index -q --really-refresh } catch { }
-            let stashCount = (gitSafe $repo stash list | complete | get stdout | lines | length)
+            let stashCount = (gitSafe $repo stash list | complete | get stdout | lines | length)  # baseline for the autostash check below
             let rebase = (gitSafe $repo rebase --autostash --quiet origin/main | complete)
             if $rebase.exit_code != 0 {
-                if ($"($repo)/.git/rebase-merge" | path exists) or ($"($repo)/.git/rebase-apply" | path exists) {
+                if ($"($repo)/($gitDir)/rebase-merge" | path exists) or ($"($repo)/($gitDir)/rebase-apply" | path exists) {
                     gitSafe $repo rebase --abort
                 }
                 error make { msg: $"($repo): rebase failed\n($rebase.stderr)" }
@@ -77,12 +78,13 @@
         # returns false when the remote can't be reached (commit stays local)
         def repoPush [repo: string, --no-retry] {
             let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
-            let remote = (gitSafe $repo rev-parse origin/main | complete | get stdout | str trim)
+            let remote = (gitSafe $repo rev-parse origin/main | complete | get stdout | str trim)  # remote tip; local == remote means nothing to push
             if $local == $remote {
                 return true
             }
             gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
             let start = (date now)
+            # --force-with-lease overwrites origin/main only if it still matches what we fetched
             mut res = (gitSafe $repo push --force-with-lease origin HEAD:main | complete)
             if $res.exit_code != 0 {
                 if (isNetworkError $res.stderr) {

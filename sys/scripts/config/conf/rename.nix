@@ -11,7 +11,7 @@
             repoSync $target
             repoSync $common
 
-            let old = (gitSafe $target log -1 --format=%s | complete | get stdout | str trim)
+            let old = (gitSafe $target log -1 --format=%s | complete | get stdout | str trim)  # subject of the last commit
             if $old == $newMsg {
                 print "Same name"
                 return
@@ -29,7 +29,7 @@
             }
 
             if $withCommon {
-                let oldCommonRev = (gitSafe $common rev-parse HEAD | complete | get stdout | str trim)
+                let oldCommonRev = (gitSafe $common rev-parse HEAD | complete | get stdout | str trim)  # common's hash before the amend
                 # amend needs --allow-empty: the last commit may carry no changes
                 silent { gitSafe $common commit --amend --allow-empty -m $newMsg }
                 # a rejected push stops the rename instead of retrying with half-renamed repos
@@ -49,6 +49,7 @@
                 }
             }
             if $target != $common {
+                # only an uncommitted lock change gets staged into the amend
                 if not ((gitSafe $target status --porcelain -- flake.lock | complete | get stdout) | is-empty) {
                     gitSafe $target add flake.lock
                 }

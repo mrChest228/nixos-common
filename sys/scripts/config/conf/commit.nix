@@ -25,7 +25,7 @@
             for repo in $repos {
                 repoSync $repo --pause
                 # re-lock only when common's HEAD actually moved
-                if not $single and (lockedRev $repo) != (gitSafe $common rev-parse HEAD | complete | get stdout | str trim) {
+                if not $single and (lockedRev $repo) != (gitSafe $common rev-parse HEAD | complete | get stdout | str trim) {  # common's current commit
                     updateCommonLock $repo
                 }
                 commitRepo $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg })
