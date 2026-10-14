@@ -3,7 +3,7 @@
         # Usage: conf rename <message> [--host (-h) <host|cur|com>] [--single (-s)]
         def "main rename" [message: string, --host(-h): string, --single(-s)] {
             checkNoForeign
-            let target = (currentRepo $host)
+            let target = (currentRepo $host --single=$single)
             let common = "${vars.configPath}/common"
             let newMsg = (buildMessage $message)
 

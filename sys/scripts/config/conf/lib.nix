@@ -14,8 +14,9 @@
             $repo
         }
         # repo to act on: --host wins; otherwise resolved by walking up from PWD and comparing device+inode,
-        # so a bind mount (e.g. ~/cfg bound to another host repo) resolves to the real repo; fallback is the host repo
-        def currentRepo [host?: string] {
+        # so a bind mount (e.g. ~/cfg bound to another host repo) resolves to the real repo; fallback is the host repo.
+        # PWD inside common resolves to the host repo — common is touched alone only via --host com or --single
+        def currentRepo [host?: string, --single] {
             if ($host | is-not-empty) {
                 return (hostRepo $host)
             }
@@ -26,7 +27,11 @@
             loop {
                 let id = (^stat -L -c '%d:%i' $p | complete | get stdout | str trim)
                 let hits = ($repoIds | enumerate | where { |x| $x.item == $id })
-                if ($hits | is-not-empty) { return ($repos | get $hits.0.index) }
+                if ($hits | is-not-empty) {
+                    let hit = ($repos | get $hits.0.index)
+                    if $hit == $"${vars.configPath}/common" and not $single { break }
+                    return $hit
+                }
                 let parent = ($p | path dirname)
                 if $parent == $p { break }
                 $p = $parent

@@ -6,7 +6,7 @@
             if $all and $single {
                 error make { msg: "--all and --single can't be used together" }
             }
-            let target = (currentRepo $host)
+            let target = (currentRepo $host --single=$single)
             let common = "${vars.configPath}/common"
             let msg = (buildMessage $message)
 
