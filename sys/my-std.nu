@@ -1,3 +1,16 @@
+# runs a command as root with the caller's own nushell config, so aliases and defs still work
+export def --wrapped nudo [...rest: string] {
+    if ($rest | is-empty) { return }
+
+    mut nwRest = ($rest | each { |s|
+        if ($s | str contains " ") { $"\"($s)\"" } else { $s } # Adds " if argument contains spaces
+    })
+    $nwRest.0 = ($nwRest.0 | str replace '^"|"$' '') # Remove " from the start and the end of command ("ls | to nuon", for example)
+
+    let cmd = ($nwRest | str join " ")
+
+    sudo nu --config $nu.config-path --env-config $nu.env-path -c $cmd
+}
 export def returnCode [code: int] {
     # $nu.current-exe is the running binary: works when nushell isn't on PATH (scripts run via the store path)
     run-external $nu.current-exe "-c" $"exit ($code)"
