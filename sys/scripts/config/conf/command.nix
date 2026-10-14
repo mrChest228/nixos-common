@@ -9,7 +9,7 @@ let
     ];
 in mkRootCommand "conf" ''
     ${commonNu}
-    ${import ./lib.nix { inherit vars; }}
+    ${import ./lib.nix { inherit pkgs vars; }}
     ${subcommands}
     # bare `conf` shows the generated help
     def main [] { help main }

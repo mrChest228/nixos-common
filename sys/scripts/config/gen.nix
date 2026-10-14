@@ -12,8 +12,8 @@ let
             ^$stc switch
         }
         def "main clean" [] { genClean }
-        def "main list" [] { ^nh os info }
-        def "main ls" [] { ^nixos-rebuild list-generations }
+        def "main list" [] { ^${pkgs.nh}/bin/nh os info }
+        def "main ls" [] { ^/run/current-system/sw/bin/nixos-rebuild list-generations }
         def main [] { help main }
     '';
 in {

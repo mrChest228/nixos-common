@@ -52,7 +52,7 @@ in {
             #!${pkgs.nushell}/bin/nu -n
             def main [interface: string, action: string] {
                 if $action == "up" {
-                    ^systemctl start --no-block conf-sync.service
+                    ^/run/current-system/sw/bin/systemctl start --no-block conf-sync.service
                 }
             }
         '';

@@ -6,15 +6,15 @@ let
         def main [message?: string] {
             checkNoForeign
             cd ${vars.configPath}/cur
-            ^nix flake update
+            ^/run/current-system/sw/bin/nix flake update
             commitIfChanged "Update" $message
-            let bootedGen = ((^readlink -f /run/current-system | complete).stdout | str trim)
-            let lstGen = ((^readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
+            let bootedGen = ((^${pkgs.coreutils}/bin/readlink -f /run/current-system | complete).stdout | str trim)
+            let lstGen = ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             # drivers depending on the new kernel (e.g. nvidia userspace vs the loaded module) break on
             # switch, so the new generation only takes effect after a reboot
-            ^nh os boot -R -H ${vars.host} ${vars.configPath}/cur
+            ^${pkgs.nh}/bin/nh os boot -R -H ${vars.host} ${vars.configPath}/cur
             homeSwitchAll
-            dropLstGen $bootedGen $lstGen ((^readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
+            dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             genClean
             print "Reboot to apply the changes"
         }

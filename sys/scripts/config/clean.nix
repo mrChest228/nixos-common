@@ -6,7 +6,7 @@ let
         $env.PATH = [ ${l.binPath} ]
         def main [] {
             if not (is-admin) { error make { msg: "clean needs root, run it with sudo" } }
-            ^nh clean all --keep 3 --keep-since 3d --optimise
+            ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --optimise
             ^/run/current-system/bin/switch-to-configuration boot
         }
     '';

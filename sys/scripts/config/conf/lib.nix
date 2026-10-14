@@ -1,4 +1,4 @@
-{ vars }:
+{ pkgs, vars }:
 ''
         # all host repos in ${vars.configPath} (git repos other than common; the cur mount is not a separate repo)
         def hostRepos [] {
@@ -22,10 +22,10 @@
             }
             let repos = ([ $"${vars.configPath}/common" ] ++ (hostRepos))
             # stat -L follows symlinks: device:inode of the dir itself
-            let repoIds = $repos | each { |r| (^stat -L -c '%d:%i' $r | complete | get stdout | str trim) }
+            let repoIds = $repos | each { |r| (^${pkgs.coreutils}/bin/stat -L -c '%d:%i' $r | complete | get stdout | str trim) }
             mut p = ($env.PWD | path expand)
             loop {
-                let id = (^stat -L -c '%d:%i' $p | complete | get stdout | str trim)
+                let id = (^${pkgs.coreutils}/bin/stat -L -c '%d:%i' $p | complete | get stdout | str trim)
                 let hits = ($repoIds | enumerate | where { |x| $x.item == $id })
                 if ($hits | is-not-empty) {
                     let hit = ($repos | get $hits.0.index)
@@ -134,7 +134,7 @@
         # re-locks the common input inside a host flake; nix output is shown only on failure
         def updateCommonLock [repo: string] {
             cd $repo
-            let res = (^nix flake update --refresh common | complete)
+            let res = (^/run/current-system/sw/bin/nix flake update --refresh common | complete)
             if $res.exit_code != 0 {
                 print $"($res.stdout)\n(ansi red)($res.stderr)(ansi rst)"
                 error make { msg: $"($repo): nix flake update common failed" }
