@@ -1,6 +1,9 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
     usersNu = lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users;
+    # sudo keeps the caller's PATH on NixOS, so every external the root impl runs must come from a fixed
+    # list: a fake git/nh earlier in the user's PATH would otherwise run as root
+    binPath = lib.concatMapStringsSep " " (p: "\"${p}\"") ((lib.splitString ":" (lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.acl pkgs.nh ])) ++ [ "/run/wrappers/bin" "/run/current-system/sw/bin" ]);
 in {
     options.config-scripts = {
         mkRootCommand = lib.mkOption {
@@ -10,7 +13,8 @@ in {
                 let
                     # real script lives in the store: sudoers can only point at files users can't edit
                     impl = pkgs.writeScript "${name}-impl" ''
-                        #!${pkgs.nushell}/bin/nu
+                        #!${pkgs.nushell}/bin/nu -n
+                        $env.PATH = [ ${binPath} ]
                         use ${../../my-std.nu} *
                         ${text}
                     '';
@@ -19,7 +23,7 @@ in {
                     # public command: root -> flock + impl; otherwise re-run itself through sudo
                     # the flock serializes whole runs; git's own index.lock only covers single ops
                     command = pkgs.writeScriptBin name ''
-                        #!${pkgs.nushell}/bin/nu
+                        #!${pkgs.nushell}/bin/nu -n
                         def --wrapped main [...args: string] {
                             if (is-admin) {
                                 exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args

@@ -3,7 +3,7 @@
     config =
         let
             clean = pkgs.writeScriptBin "clean" ''
-                #!${pkgs.nushell}/bin/nu
+                #!${pkgs.nushell}/bin/nu -n
                 def main [] {
                     if not (is-admin) { error make { msg: "clean needs root, run it with sudo" } }
                     ^nh clean all --keep 3 --keep-since 3d --optimise

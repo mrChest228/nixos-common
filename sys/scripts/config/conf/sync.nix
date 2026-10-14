@@ -27,7 +27,7 @@
     networking.networkmanager.dispatcherScripts = lib.mkIf config.networking.networkmanager.enable [{
         type = "basic";
         source = pkgs.writeScript "conf-sync-dispatcher" ''
-            #!${pkgs.nushell}/bin/nu
+            #!${pkgs.nushell}/bin/nu -n
             def main [interface: string, action: string] {
                 if $action == "up" {
                     ^systemctl start --no-block conf-sync.service
