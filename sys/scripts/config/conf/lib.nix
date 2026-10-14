@@ -1,10 +1,6 @@
 { config, lib, com, pkgs, vars, self, ... }: {
     conf.lib = ''
         ${config.config-scripts.commonNu}
-        # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
-        def --wrapped gitSafe [repo: string, ...args: string] {
-            ^git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
-        }
         # all host repos in ${vars.configPath} (git repos other than common; the cur mount is not a separate repo)
         def hostRepos [] {
             ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }

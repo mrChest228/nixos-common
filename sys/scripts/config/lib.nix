@@ -35,6 +35,10 @@ in {
         nuLib = lib.mkOption { type = lib.types.lines; internal = true; default = ""; };
     };
     config.config-scripts.commonNu = ''
+        # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
+        def --wrapped gitSafe [repo: string, ...args: string] {
+            ^git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
+        }
         # always prints the error in red; with --quiet (service) also logs to the journal and notifies the first user
         def reportProblem [repo: string, text: string, --quiet] {
             print -e $"(ansi red)($repo): ($text)(ansi rst)"
@@ -82,7 +86,8 @@ in {
     config.config-scripts.nuLib = ''
         ${config.config-scripts.commonNu}
         def commitIfChanged [prefix: string, message?: string] {
-            let dirty = (not ((^git -C ${vars.configPath}/cur -c core.fsmonitor=false status --porcelain | complete).stdout | is-empty))
+            # status --porcelain is empty only when the worktree is clean
+            let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
                 # the impl does the work as root; going through the wrapper would deadlock on the flock we hold
