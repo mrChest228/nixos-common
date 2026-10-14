@@ -9,7 +9,8 @@ export def --wrapped nudo [...rest: string] {
 
     let cmd = ($nwRest | str join " ")
 
-    sudo nu --config $nu.config-path --env-config $nu.env-path -c $cmd
+    # absolute path to the running nu: sudo resolves `nu` through the caller's PATH otherwise
+    sudo $nu.current-exe --config $nu.config-path --env-config $nu.env-path -c $cmd
 }
 export def returnCode [code: int] {
     # $nu.current-exe is the running binary: works when nushell isn't on PATH (scripts run via the store path)
