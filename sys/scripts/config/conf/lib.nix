@@ -5,24 +5,24 @@
         def hostRepos [] {
             ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
         }
-        # repo to act on: --host wins; otherwise resolved from the current directory
-        # cur and /home/<user>/cfg both resolve to this host's repo; outside a git dir defaults to the host repo too
+        # repo to act on: --host wins; otherwise resolved from PWD by path, root never runs git in a random cwd
+        # cur, /home/<user>/cfg, unknown subdirs of the config dir and everything outside resolve to the host repo
         def currentRepo [host?: string] {
             if ($host | is-not-empty) {
-                return $"${vars.configPath}/($host)"
+                let repo = $"${vars.configPath}/(if $host == "cur" { "${vars.host}" } else { $host })"
+                if not ($"($repo)/.git" | path exists) {
+                    error make { msg: $"($repo) is not a config repo" }
+                }
+                return $repo
             }
-            let top = (try { ^git rev-parse --show-toplevel | complete | get stdout | str trim } catch { "" })
-            if ($top | is-empty) {
-                return "${vars.configPath}/${vars.host}"
+            let p = ($env.PWD | path expand)
+            if ($p | str starts-with $"${vars.configPath}/") {
+                let first = ($p | path relative-to ${vars.configPath} | path split | first)
+                if $first != "cur" and ($"${vars.configPath}/($first)/.git" | path exists) {
+                    return $"${vars.configPath}/($first)"
+                }
             }
-            if ($top | str starts-with "${vars.configPath}/") {
-                if ($top | path basename) == "cur" { return "${vars.configPath}/${vars.host}" }
-                return $top
-            }
-            if ($top | path basename) == "cfg" and ($top | path dirname | path dirname) == "/home" {
-                return "${vars.configPath}/${vars.host}"
-            }
-            error make { msg: $"($top) is not a config repo" }
+            $"${vars.configPath}/${vars.host}"
         }
         # refuses to touch a repo mid-rebase or on a detached HEAD
         def checkRepoState [repo: string] {
