@@ -58,4 +58,5 @@
                 repoPush $target --no-retry
             }
             main perms
+        }
 ''

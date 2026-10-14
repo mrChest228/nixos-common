@@ -32,4 +32,5 @@
                 repoPush $repo
             }
             main perms
+        }
 ''

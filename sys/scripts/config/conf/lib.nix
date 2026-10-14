@@ -188,4 +188,5 @@
         # commit message format: "<HOST>: <message>" (or "Commit <date>" when no message is given)
         def buildMessage [message?: string] {
             $"${vars.host}: " + if ($message | is-empty) { $"Commit (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message }
+        }
 ''
