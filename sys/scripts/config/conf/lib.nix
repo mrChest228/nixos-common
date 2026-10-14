@@ -4,8 +4,8 @@
         def hostRepos [] {
             ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
         }
-        # repo to act on: --host wins; otherwise resolved from PWD by path, root never runs git in a random cwd
-        # cur, /home/<user>/cfg, unknown subdirs of the config dir and everything outside resolve to the host repo
+        # repo to act on: --host wins; otherwise resolved by walking up from PWD and comparing device+inode,
+        # so a bind mount (e.g. ~/cfg bound to another host repo) resolves to the real repo; fallback is the host repo
         def currentRepo [host?: string] {
             if ($host | is-not-empty) {
                 let repo = $"${vars.configPath}/(if $host == "cur" { "${vars.host}" } else { $host })"
@@ -14,12 +14,17 @@
                 }
                 return $repo
             }
-            let p = ($env.PWD | path expand)
-            if ($p | str starts-with $"${vars.configPath}/") {
-                let first = ($p | path relative-to ${vars.configPath} | path split | first)
-                if $first != "cur" and ($"${vars.configPath}/($first)/.git" | path exists) {
-                    return $"${vars.configPath}/($first)"
-                }
+            let repos = ([ "common" ] ++ (hostRepos)) | each { |r| $"${vars.configPath}/($r)" }
+            # stat -L follows symlinks: device:inode of the dir itself
+            let repoIds = $repos | each { |r| (^stat -L -c '%d:%i' $r | complete | get stdout | str trim) }
+            mut p = ($env.PWD | path expand)
+            loop {
+                let id = (^stat -L -c '%d:%i' $p | complete | get stdout | str trim)
+                let hits = ($repoIds | enumerate | where { |x| $x.item == $id })
+                if ($hits | is-not-empty) { return ($repos | get $hits.0.index) }
+                let parent = ($p | path dirname)
+                if $parent == $p { break }
+                $p = $parent
             }
             $"${vars.configPath}/${vars.host}"
         }
