@@ -11,7 +11,7 @@ in {
                     # real script lives in the store: sudoers can only point at files users can't edit
                     impl = pkgs.writeScript "${name}-impl" ''
                         #!${pkgs.nushell}/bin/nu
-                        use ${../../lib.nu} *
+                        use ${../../my-std.nu} *
                         ${text}
                     '';
                 in {

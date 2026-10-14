@@ -16,7 +16,7 @@
         };
         envFile.text = ""; # Create the .env file
         extraConfig = ''
-            use ${../../sys/lib.nu} *
+            use ${../../sys/my-std.nu} *
             def --wrapped nudo [...rest: string] {
                 if ($rest | is-empty) { return }
 
