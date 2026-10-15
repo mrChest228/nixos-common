@@ -13,7 +13,7 @@
             $repo
         }
         # repo to act on: --host wins; otherwise resolved by walking up from PWD and comparing device+inode,
-        # so a bind mount (e.g. ~/cfg bound to another host repo) resolves to the real repo; fallback is the host repo.
+        # so a bind mount (e.g. a directory bound to another host repo) resolves to the real repo; fallback is the host repo.
         # PWD inside common resolves to the host repo — common is touched alone only via --host com or --single
         def currentRepo [host?: string, --single] {
             if ($host | is-not-empty) {
