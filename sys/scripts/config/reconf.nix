@@ -1,8 +1,8 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
-    l = import ./lib.nix { inherit lib pkgs vars; };
-    cmd = l.mkRootCommand "reconf" ''
-        ${l.nuLib}
+    scripts = import ./lib.nix { inherit lib pkgs vars; };
+    cmd = scripts.mkRootCommand "reconf" ''
+        ${scripts.nuLib}
         def main [] {
             checkNoForeign
             commitIfChanged "Reconf"

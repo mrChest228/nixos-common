@@ -1,11 +1,11 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
-    l = import ../lib.nix { inherit lib pkgs vars; };
+    scripts = import ../lib.nix { inherit lib pkgs vars; };
 in {
-    environment.systemPackages = [ l.conf.command ];
+    environment.systemPackages = [ scripts.conf.command ];
     security.sudo.extraRules = [{
         groups = [ "wheel" ];
-        commands = [{ command = "${l.conf.command}/bin/conf"; options = [ "NOPASSWD" ]; }];
+        commands = [{ command = "${scripts.conf.command}/bin/conf"; options = [ "NOPASSWD" ]; }];
     }];
     systemd.services.conf-perms = {
         description = "Fix ownership and modes of config repos";
@@ -13,7 +13,7 @@ in {
         path = [ pkgs.acl pkgs.coreutils pkgs.findutils pkgs.nushell pkgs.util-linux ];
         serviceConfig = {
             Type = "oneshot";
-            ExecStart = "${l.conf.command}/bin/conf perms";
+            ExecStart = "${scripts.conf.command}/bin/conf perms";
         };
     };
     # a root-created hm/<user> must be handed to that user; minimal-chown keeps this from retriggering itself
@@ -27,8 +27,8 @@ in {
         serviceConfig = {
             Type = "oneshot";
             ExecStart = [
-                "${l.conf.command}/bin/conf pull --quiet"
-                "${l.conf.command}/bin/conf push --quiet"
+                "${scripts.conf.command}/bin/conf pull --quiet"
+                "${scripts.conf.command}/bin/conf push --quiet"
             ];
             # syncing never delays real work
             CPUSchedulingPolicy = "idle";

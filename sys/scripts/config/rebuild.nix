@@ -1,8 +1,8 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
-    l = import ./lib.nix { inherit lib pkgs vars; };
-    cmd = l.mkRootCommand "rebuild" ''
-        ${l.nuLib}
+    scripts = import ./lib.nix { inherit lib pkgs vars; };
+    cmd = scripts.mkRootCommand "rebuild" ''
+        ${scripts.nuLib}
         def main [message?: string] {
             checkNoForeign
             commitIfChanged "Rebuild" $message
@@ -12,7 +12,7 @@ let
             dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             genClean
             # activation may have created users from vars.users; their hm dirs get re-owned now
-            ^${l.conf.impl} perms
+            ^${scripts.conf.impl} perms
         }
     '';
 in {

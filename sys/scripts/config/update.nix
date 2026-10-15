@@ -1,8 +1,8 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
-    l = import ./lib.nix { inherit lib pkgs vars; };
-    cmd = l.mkRootCommand "update" ''
-        ${l.nuLib}
+    scripts = import ./lib.nix { inherit lib pkgs vars; };
+    cmd = scripts.mkRootCommand "update" ''
+        ${scripts.nuLib}
         def main [message?: string] {
             checkNoForeign
             cd ${vars.configPath}/cur

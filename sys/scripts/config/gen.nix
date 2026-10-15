@@ -1,10 +1,10 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
-    l = import ./lib.nix { inherit lib pkgs vars; };
+    scripts = import ./lib.nix { inherit lib pkgs vars; };
     gen = pkgs.writeScriptBin "gen" ''
         #!${pkgs.nushell}/bin/nu -n
-        $env.PATH = [ ${l.binPath} ]
-        ${l.genNu}
+        $env.PATH = [ ${scripts.binPath} ]
+        ${scripts.genNu}
         def "main del" [...ids: string] { genDel ...$ids }
         def "main switch" [id: string] {
             if not (is-admin) { error make { msg: "gen switch needs root, run it with sudo" } }

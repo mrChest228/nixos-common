@@ -1,9 +1,9 @@
 { config, lib, com, pkgs, vars, self, ... }:
 let
-    l = import ./lib.nix { inherit lib pkgs vars; };
+    scripts = import ./lib.nix { inherit lib pkgs vars; };
     clean = pkgs.writeScriptBin "clean" ''
         #!${pkgs.nushell}/bin/nu -n
-        $env.PATH = [ ${l.binPath} ]
+        $env.PATH = [ ${scripts.binPath} ]
         def main [] {
             if not (is-admin) { error make { msg: "clean needs root, run it with sudo" } }
             ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --optimise
