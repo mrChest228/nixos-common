@@ -1,5 +1,4 @@
-{ vars }:
-''
+{ vars }: ''
         # Usage: conf rename <message> [--host (-h) <host|cur|com>] [--single (-s)]
         def "main rename" [message: string, --host(-h): string, --single(-s)] {
             checkNoForeign

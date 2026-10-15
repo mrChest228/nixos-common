@@ -1,5 +1,4 @@
-{ vars }:
-''
+{ vars }: ''
         # Usage: conf pull [--host (-h) <host|cur|com>] [--quiet (-q)]
         def "main pull" [--host(-h): string, --quiet(-q)] {
             checkNoForeign

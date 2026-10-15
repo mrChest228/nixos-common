@@ -1,5 +1,4 @@
-{ vars }:
-''
+{ vars }: ''
         # Usage: conf commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)]
         def "main commit" [message?: string, --host(-h): string, --all(-a), --single(-s)] {
             checkNoForeign

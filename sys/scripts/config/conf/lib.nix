@@ -1,5 +1,4 @@
-{ pkgs, vars }:
-''
+{ pkgs, vars }: ''
         # all host repos in ${vars.configPath} (git repos other than common; the cur mount is not a separate repo)
         def hostRepos [] {
             ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) not-in [ "common" "cur" ] }
