@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }:
+{ config, lib, pkgs, vars, com, cur, ... }:
 let
     scripts = import ./lib.nix { inherit lib pkgs vars; };
     cmd = scripts.mkRootCommand "rebuild" ''

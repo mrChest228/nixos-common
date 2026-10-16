@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     nixpkgs.overlays = [(final: prev: {
         comma = prev.comma.override { nix = config.nix.package; }; # Prevent warning "unknown settings 'eval-cores' and 'lazy-trees'" from determinate nix config
     })];

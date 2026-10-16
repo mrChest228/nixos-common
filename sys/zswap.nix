@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     swapDevices = [{
         device = "/dev/disk/by-partlabel/${vars.host}-swap";
     }];
