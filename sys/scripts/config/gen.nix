@@ -1,6 +1,6 @@
 { config, lib, pkgs, vars, com, cur, ... }:
 let
-    scripts = import (com + /sys/scripts/config/lib.nix) { inherit lib pkgs vars com; };
+    scripts = import ./lib.nix { inherit lib pkgs vars com; };
     gen = pkgs.writeScriptBin "gen" ''
         #!${pkgs.nushell}/bin/nu -n
         $env.PATH = [ ${scripts.binPath} ]

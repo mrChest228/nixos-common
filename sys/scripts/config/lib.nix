@@ -145,5 +145,5 @@ in rec {
             }
         }
     '';
-    conf = import (com + /sys/scripts/config/conf/command.nix) { inherit lib pkgs vars com mkRootCommand commonNu; };
+    conf = import ./conf/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
 }
