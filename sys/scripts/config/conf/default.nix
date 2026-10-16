@@ -1,6 +1,6 @@
 { config, lib, pkgs, vars, com, cur, ... }:
 let
-    scripts = import ../lib.nix { inherit lib pkgs vars; };
+    scripts = import (com + "/sys/scripts/config/lib.nix") { inherit lib pkgs vars com; };
 in {
     environment.systemPackages = [ scripts.conf.command ];
     security.sudo.extraRules = [{

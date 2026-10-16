@@ -1,4 +1,4 @@
-{ lib, pkgs, vars }:
+{ lib, pkgs, vars, com }:
 let
     usersNu = lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users;
     # sudo keeps the caller's PATH on NixOS, so every external the root impl runs must come from a fixed
@@ -13,7 +13,7 @@ in rec {
             impl = pkgs.writeScript "${name}-impl" ''
                 #!${pkgs.nushell}/bin/nu -n
                 $env.PATH = [ ${binPath} ]
-                use ${../../my-std.nu} *
+                use ${com + "/sys/my-std.nu"} *
                 ${text}
             '';
             # public command: root -> flock + impl; otherwise re-run itself through sudo
@@ -145,5 +145,5 @@ in rec {
             }
         }
     '';
-    conf = import ./conf/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
+    conf = import (com + "/sys/scripts/config/conf/command.nix") { inherit lib pkgs vars com mkRootCommand commonNu; };
 }
