@@ -13,7 +13,7 @@ in rec {
             impl = pkgs.writeScript "${name}-impl" ''
                 #!${pkgs.nushell}/bin/nu -n
                 $env.PATH = [ ${binPath} ]
-                use ${com + "/sys/my-std.nu"} *
+                use ${com + /sys/my-std.nu} *
                 ${text}
             '';
             # public command: root -> flock + impl; otherwise re-run itself through sudo
@@ -145,5 +145,5 @@ in rec {
             }
         }
     '';
-    conf = import (com + "/sys/scripts/config/conf/command.nix") { inherit lib pkgs vars com mkRootCommand commonNu; };
+    conf = import (com + /sys/scripts/config/conf/command.nix) { inherit lib pkgs vars com mkRootCommand commonNu; };
 }

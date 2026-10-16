@@ -16,7 +16,7 @@
         };
         envFile.text = ""; # Create the .env file
         extraConfig = ''
-            use ${com + "/sys/my-std.nu"} *
+            use ${com + /sys/my-std.nu} *
         '';
         shellAliases = {
             tp = "trash-put";
