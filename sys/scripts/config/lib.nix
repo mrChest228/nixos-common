@@ -78,21 +78,8 @@ in rec {
             if ($foreign | is-not-empty) { exit 1 }
         }
     '';
-    genNu = ''
-        def genDel [...ids: string] {
-            if not (is-admin) { error make { msg: "gen del needs root, run it with sudo" } }
-            ^/run/current-system/sw/bin/nix-env --profile /nix/var/nix/profiles/system --delete-generations ...$ids
-            ^/run/current-system/bin/switch-to-configuration boot
-        }
-        def genClean [] {
-            if not (is-admin) { error make { msg: "gen clean needs root, run it with sudo" } }
-            ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --nogc --nogcroots
-            ^/run/current-system/bin/switch-to-configuration boot
-        }
-    '';
     nuLib = ''
         ${commonNu}
-        ${genNu}
         def commitIfChanged [prefix: string, message?: string] {
             # status --porcelain is empty only when the worktree is clean
             let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))
@@ -141,9 +128,10 @@ in rec {
                 | where { |e| $e.type == "symlink" and ($e.name | path basename | str starts-with "system-") }
                 | where { |e| ((^${pkgs.coreutils}/bin/readlink -f $e.name | complete).stdout | str trim) == $lstGen })
             if (($lstLinks | length) == 1) {
-                genDel ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
+                ^${gen}/bin/gen del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
             }
         }
     '';
+    gen = import ./gen/command.nix { inherit pkgs binPath; };
     conf = import ./conf/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
 }

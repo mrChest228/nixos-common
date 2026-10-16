@@ -7,7 +7,7 @@ let
             checkNoForeign
             commitIfChanged "Reconf"
             homeSwitchAll
-            genClean
+            ^${scripts.gen}/bin/gen clean
         }
     '';
 in {

@@ -15,7 +15,7 @@ let
             ^${pkgs.nh}/bin/nh os boot -R -H ${vars.host} ${vars.configPath}/cur
             homeSwitchAll
             dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
-            genClean
+            ^${scripts.gen}/bin/gen clean
             print "Reboot to apply the changes"
         }
     '';
