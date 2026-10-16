@@ -1,4 +1,5 @@
-{ lib, pkgs, vars }: ''
+{ lib, pkgs, vars }:
+''
         # Git runs here as root, so pulled/created files are root-owned; this fixes ownership under ${vars.configPath}.
         # Only wrong entries are touched: chown bumps ctime -> git rescans every file, and the path
         # unit below would retrigger itself forever.

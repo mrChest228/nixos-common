@@ -1,4 +1,5 @@
-{ vars }: ''
+{ vars }:
+''
         # Usage: conf push [--host (-h) <host|cur|com>] [--quiet (-q)]
         def "main push" [--host(-h): string, --quiet(-q)] {
             checkNoForeign
