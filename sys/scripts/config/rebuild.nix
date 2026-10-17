@@ -2,7 +2,7 @@
 let
     scripts = import ./_lib.nix { inherit lib pkgs vars com; };
     cmd = scripts.mkRootFlockCommand "rebuild" ''
-        ${scripts.nuLib}
+        ${scripts.nuSwitch}
         def main [message?: string] {
             checkNoForeign
             commitIfChanged "Rebuild" $message

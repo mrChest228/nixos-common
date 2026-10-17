@@ -36,7 +36,8 @@ rec {
             }
         '';
     };
-    commonNu = ''
+    # nushell text shared by every config command: safe git, reporting, foreign hm dir checks
+    nuBase = ''
         # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
         def --wrapped gitSafe [repo: string, ...args: string] {
             ^${pkgs.git}/bin/git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=${pkgs.openssh}/bin/ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
@@ -85,10 +86,11 @@ rec {
             if ($foreign | is-not-empty) { exit 1 }
         }
     '';
+    # nuBase plus what only the switching commands (update, rebuild, reconf) need.
     # cfg and gen are run as installed in the current system, not by store path: this file must not depend
     # on the command packages (cfg/default.nix and gen/default.nix build them from here)
-    nuLib = ''
-        ${commonNu}
+    nuSwitch = ''
+        ${nuBase}
         def commitIfChanged [prefix: string, message?: string] {
             # status --porcelain is empty only when the worktree is clean
             let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))

@@ -9,7 +9,7 @@ let
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
 in scripts.mkRootFlockCommand "cfg" ''
-    ${scripts.commonNu}
+    ${scripts.nuBase}
     ${import ./lib.nix { inherit pkgs vars; }}
     ${subcommands}
     # bare `cfg` shows the generated help

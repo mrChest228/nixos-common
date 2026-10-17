@@ -2,7 +2,7 @@
 let
     scripts = import ./_lib.nix { inherit lib pkgs vars com; };
     cmd = scripts.mkRootFlockCommand "reconf" ''
-        ${scripts.nuLib}
+        ${scripts.nuSwitch}
         def main [] {
             checkNoForeign
             commitIfChanged "Reconf"
