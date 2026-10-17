@@ -1,6 +1,6 @@
 { config, lib, pkgs, vars, com, cur, ... }:
 let
-    scripts = import ./lib.nix { inherit lib pkgs vars com; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
     cmd = scripts.mkRootCommand "reconf" ''
         ${scripts.nuLib}
         def main [] {
