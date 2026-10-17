@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     programs = {
         niri.enable = true;
         # Autostart

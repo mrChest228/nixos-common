@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     systemd.settings.Manager = {
         DefaultTimeoutStopSec = "30s"; # Services stopping timer before killing during shutting down
         DefaultTimeoutStartSec = "30s";

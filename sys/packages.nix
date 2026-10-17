@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     environment.systemPackages = with pkgs; [
         home-manager # HM command
         nix-output-monitor

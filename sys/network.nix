@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }:
+{ config, lib, pkgs, vars, com, cur, ... }:
 {
     networking = {
         #TODO: hosts with My server (if the Internet or electricy will be disabled (for local network))
