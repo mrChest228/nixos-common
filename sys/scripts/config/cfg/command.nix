@@ -1,5 +1,6 @@
-{ lib, pkgs, vars, mkRootFlockCommand, commonNu }:
+{ lib, pkgs, vars, com }:
 let
+    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
     subcommands = lib.concatStringsSep "\n" [
         (import ./commit.nix { inherit vars; })
         (import ./rename.nix { inherit vars; })
@@ -7,8 +8,8 @@ let
         (import ./push.nix { inherit vars; })
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
-in mkRootFlockCommand "cfg" ''
-    ${commonNu}
+in scripts.mkRootFlockCommand "cfg" ''
+    ${scripts.commonNu}
     ${import ./lib.nix { inherit pkgs vars; }}
     ${subcommands}
     # bare `cfg` shows the generated help

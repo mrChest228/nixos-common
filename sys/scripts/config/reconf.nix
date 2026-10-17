@@ -7,7 +7,7 @@ let
             checkNoForeign
             commitIfChanged "Reconf"
             homeSwitchAll
-            ^${scripts.gen}/bin/gen clean
+            ^/run/current-system/sw/bin/gen clean
         }
     '';
 in {

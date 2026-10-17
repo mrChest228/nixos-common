@@ -1,7 +1,9 @@
-{ pkgs, binPathNuList }:
-pkgs.writeScriptBin "gen" ''
+{ lib, pkgs, vars, com }:
+let
+    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
+in pkgs.writeScriptBin "gen" ''
     #!${pkgs.nushell}/bin/nu -n
-    $env.PATH = ${binPathNuList}
+    $env.PATH = ${scripts.binPathNuList}
     # root-only subcommands re-run the whole command through sudo (which asks for the password) when started by a user
     def rootOrSudo [...args: string] {
         if not (is-admin) { exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) ...$args }

@@ -4,14 +4,16 @@ rec {
     hmUsersNuList = "[ ${lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users} ]";
     # PATH for root scripts as a nushell list literal. sudo keeps the caller's PATH on NixOS, so the impl
     # replaces it: a fake nix/git earlier in the user's PATH would otherwise run as root. Everything the
-    # scripts run themselves is called by store path; PATH only serves programs those start by name:
+    # scripts run themselves is called by full path; PATH only serves programs those start by name:
     #   /run/current-system/sw/bin  nh runs nix and nixos-rebuild by name; nix/HM activation may call systemctl
     binPathNuList = "[ \"/run/current-system/sw/bin\" ]";
     # Command that may only run as root and never alongside another config command.
     # Started by a non-root user it re-runs itself through sudo (so sudo asks for the password unless a
     # NOPASSWD rule matches); as root it runs the impl under flock /run/nixos-config.lock. flock waits
     # (no -n) until the lock is free, also in services; it only protects against other commands, not
-    # against git run by hand
+    # against git run by hand. A command started by one that already holds the lock (rebuild -> cfg perms)
+    # sees NIXOS_CONFIG_LOCKED and skips the second flock, which would deadlock; sudo's env_reset keeps
+    # users from setting that variable themselves
     mkRootFlockCommand = name: text: rec {
         # real script lives in the store: sudoers can only point at files users can't edit
         impl = pkgs.writeScript "${name}-impl" ''
@@ -23,10 +25,13 @@ rec {
         command = pkgs.writeScriptBin name ''
             #!${pkgs.nushell}/bin/nu -n
             def --wrapped main [...args: string] {
-                if (is-admin) {
-                    exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args
-                } else {
+                if not (is-admin) {
                     exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) ...$args
+                } else if ($env.NIXOS_CONFIG_LOCKED? == "1") {
+                    exec ${impl} ...$args
+                } else {
+                    $env.NIXOS_CONFIG_LOCKED = "1"
+                    exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args
                 }
             }
         '';
@@ -80,6 +85,8 @@ rec {
             if ($foreign | is-not-empty) { exit 1 }
         }
     '';
+    # cfg and gen are run as installed in the current system, not by store path: this file must not depend
+    # on the command packages (cfg/default.nix and gen/default.nix build them from here)
     nuLib = ''
         ${commonNu}
         def commitIfChanged [prefix: string, message?: string] {
@@ -87,8 +94,7 @@ rec {
             let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
-                # the impl does the work as root; going through the wrapper would deadlock on the flock we hold
-                try { ^${cfg.impl} commit $msg }
+                try { ^/run/current-system/sw/bin/cfg commit $msg }
             }
         }
         # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates
@@ -130,10 +136,8 @@ rec {
                 | where { |e| $e.type == "symlink" and ($e.name | path basename | str starts-with "system-") }
                 | where { |e| ((^${pkgs.coreutils}/bin/readlink -f $e.name | complete).stdout | str trim) == $lstGen })
             if (($lstLinks | length) == 1) {
-                ^${gen}/bin/gen del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
+                ^/run/current-system/sw/bin/gen del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
             }
         }
     '';
-    gen = import ./gen/command.nix { inherit pkgs binPathNuList; };
-    cfg = import ./cfg/command.nix { inherit lib pkgs vars mkRootFlockCommand commonNu; };
 }

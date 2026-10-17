@@ -1,11 +1,11 @@
 { config, lib, pkgs, vars, com, cur, ... }:
 let
-    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
+    cfg = import ./command.nix { inherit lib pkgs vars com; };
 in {
-    environment.systemPackages = [ scripts.cfg.command ];
+    environment.systemPackages = [ cfg.command ];
     security.sudo.extraRules = [{
         groups = [ "wheel" ];
-        commands = [{ command = "${scripts.cfg.command}/bin/cfg"; options = [ "NOPASSWD" ]; }];
+        commands = [{ command = "${cfg.command}/bin/cfg"; options = [ "NOPASSWD" ]; }];
     }];
     systemd.services.cfg-perms = {
         description = "Fix ownership and modes of config repos";
@@ -13,7 +13,7 @@ in {
         path = [ pkgs.acl pkgs.coreutils pkgs.findutils pkgs.nushell pkgs.util-linux ];
         serviceConfig = {
             Type = "oneshot";
-            ExecStart = "${scripts.cfg.command}/bin/cfg perms";
+            ExecStart = "${cfg.command}/bin/cfg perms";
         };
     };
     # a root-created hm/<user> must be handed to that user; minimal-chown keeps this from retriggering itself
@@ -27,8 +27,8 @@ in {
         serviceConfig = {
             Type = "oneshot";
             ExecStart = [
-                "${scripts.cfg.command}/bin/cfg pull --quiet"
-                "${scripts.cfg.command}/bin/cfg push --quiet"
+                "${cfg.command}/bin/cfg pull --quiet"
+                "${cfg.command}/bin/cfg push --quiet"
             ];
             # syncing never delays real work
             CPUSchedulingPolicy = "idle";

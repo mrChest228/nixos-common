@@ -10,9 +10,9 @@ let
             let lstGen = ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             ^${pkgs.nh}/bin/nh os switch -R -H ${vars.host} ${vars.configPath}/cur
             dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
-            ^${scripts.gen}/bin/gen clean
+            ^/run/current-system/sw/bin/gen clean
             # activation may have created users from vars.users; their hm dirs get re-owned now
-            ^${scripts.cfg.impl} perms
+            ^/run/current-system/sw/bin/cfg perms
         }
     '';
 in {
