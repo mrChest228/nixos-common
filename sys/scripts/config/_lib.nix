@@ -1,34 +1,36 @@
 { lib, pkgs, vars, com }:
-let
-    usersNu = lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users;
-    # sudo keeps the caller's PATH on NixOS, so every external the root impl runs must come from a fixed
-    # list: a fake git/nh earlier in the user's PATH would otherwise run as root
-    # sw/bin (system profile) goes first so a host may replace a tool system-wide
-    binPath = lib.concatMapStringsSep " " (p: "\"${p}\"") ([ "/run/wrappers/bin" "/run/current-system/sw/bin" ] ++ (lib.splitString ":" (lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.acl pkgs.nh ])));
-in rec {
-    inherit binPath;
-    mkRootCommand = name: text:
-        let
-            # real script lives in the store: sudoers can only point at files users can't edit
-            impl = pkgs.writeScript "${name}-impl" ''
-                #!${pkgs.nushell}/bin/nu -n
-                $env.PATH = [ ${binPath} ]
-                use ${com + /sys/my-std.nu} *
-                ${text}
-            '';
-            # public command: root -> flock + impl; otherwise re-run itself through sudo
-            # the flock serializes whole runs; git's own index.lock only covers single ops
-            command = pkgs.writeScriptBin name ''
-                #!${pkgs.nushell}/bin/nu -n
-                def --wrapped main [...args: string] {
-                    if (is-admin) {
-                        exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args
-                    } else {
-                        exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) ...$args
-                    }
+rec {
+    # nushell list literal of the users whose Home Manager these scripts switch and whose hm/<user> dirs they check
+    hmUsersNuList = "[ ${lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users} ]";
+    # PATH for root scripts as a nushell list literal. sudo keeps the caller's PATH on NixOS, so the impl
+    # replaces it: a fake nix/git earlier in the user's PATH would otherwise run as root. Everything the
+    # scripts run themselves is called by store path; PATH only serves programs those start by name:
+    #   /run/current-system/sw/bin  nh runs nix and nixos-rebuild by name; nix/HM activation may call systemctl
+    binPathNuList = "[ \"/run/current-system/sw/bin\" ]";
+    # Command that may only run as root and never alongside another config command.
+    # Started by a non-root user it re-runs itself through sudo (so sudo asks for the password unless a
+    # NOPASSWD rule matches); as root it runs the impl under flock /run/nixos-config.lock. flock waits
+    # (no -n) until the lock is free, also in services; it only protects against other commands, not
+    # against git run by hand
+    mkRootFlockCommand = name: text: rec {
+        # real script lives in the store: sudoers can only point at files users can't edit
+        impl = pkgs.writeScript "${name}-impl" ''
+            #!${pkgs.nushell}/bin/nu -n
+            $env.PATH = ${binPathNuList}
+            use ${com + /sys/my-std.nu} *
+            ${text}
+        '';
+        command = pkgs.writeScriptBin name ''
+            #!${pkgs.nushell}/bin/nu -n
+            def --wrapped main [...args: string] {
+                if (is-admin) {
+                    exec ${pkgs.util-linux}/bin/flock /run/nixos-config.lock ${impl} ...$args
+                } else {
+                    exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) ...$args
                 }
-            '';
-        in { inherit impl command; };
+            }
+        '';
+    };
     commonNu = ''
         # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
         def --wrapped gitSafe [repo: string, ...args: string] {
@@ -49,7 +51,7 @@ in rec {
         # a stray owned-by-someone dir under hm can become code root evaluates after a passwordless reconf
         def foreignHmDirs [] {
             let firstUser = "${builtins.head vars.users}"
-            let users = [ ${usersNu} ]
+            let users = ${hmUsersNuList}
             mut bad = []
             for repo in (ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name) {
                 let hm = $"($repo)/hm"
@@ -110,7 +112,7 @@ in rec {
             } else {
                 print $"(ansi red)hm/root is not owned and permissioned for root; skipping root's home switch(ansi rst)"
             }
-            for u in [ ${usersNu} ] {
+            for u in ${hmUsersNuList} {
                 if ((^${pkgs.coreutils}/bin/id -u $u | complete).exit_code != 0) {
                     print $"(ansi yellow)($u): no such user yet, skipping home switch(ansi rst)"
                     continue
@@ -132,6 +134,6 @@ in rec {
             }
         }
     '';
-    gen = import ./gen/command.nix { inherit pkgs binPath; };
-    cfg = import ./cfg/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
+    gen = import ./gen/command.nix { inherit pkgs binPathNuList; };
+    cfg = import ./cfg/command.nix { inherit lib pkgs vars mkRootFlockCommand commonNu; };
 }

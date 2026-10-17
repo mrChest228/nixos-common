@@ -1,4 +1,4 @@
-{ lib, pkgs, vars, mkRootCommand, commonNu }:
+{ lib, pkgs, vars, mkRootFlockCommand, commonNu }:
 let
     subcommands = lib.concatStringsSep "\n" [
         (import ./commit.nix { inherit vars; })
@@ -7,7 +7,7 @@ let
         (import ./push.nix { inherit vars; })
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
-in mkRootCommand "cfg" ''
+in mkRootFlockCommand "cfg" ''
     ${commonNu}
     ${import ./lib.nix { inherit pkgs vars; }}
     ${subcommands}

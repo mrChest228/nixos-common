@@ -1,7 +1,7 @@
-{ pkgs, binPath }:
+{ pkgs, binPathNuList }:
 pkgs.writeScriptBin "gen" ''
     #!${pkgs.nushell}/bin/nu -n
-    $env.PATH = [ ${binPath} ]
+    $env.PATH = ${binPathNuList}
     def "main del" [...ids: string] {
         if not (is-admin) { error make { msg: "gen del needs root, run it with sudo" } }
         ^/run/current-system/sw/bin/nix-env --profile /nix/var/nix/profiles/system --delete-generations ...$ids

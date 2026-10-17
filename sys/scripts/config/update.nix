@@ -1,7 +1,7 @@
 { config, lib, pkgs, vars, com, cur, ... }:
 let
     scripts = import ./_lib.nix { inherit lib pkgs vars com; };
-    cmd = scripts.mkRootCommand "update" ''
+    cmd = scripts.mkRootFlockCommand "update" ''
         ${scripts.nuLib}
         def main [message?: string] {
             checkNoForeign
