@@ -7,10 +7,10 @@ let
         (import ./push.nix { inherit vars; })
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
-in mkRootCommand "conf" ''
+in mkRootCommand "cfg" ''
     ${commonNu}
     ${import ./lib.nix { inherit pkgs vars; }}
     ${subcommands}
-    # bare `conf` shows the generated help
+    # bare `cfg` shows the generated help
     def main [] { help main }
 ''

@@ -43,7 +43,7 @@
                 ^${pkgs.findutils}/bin/find $repo ...$prunes -type f ! -path $hm ! -perm -444 -exec ${pkgs.coreutils}/bin/chmod a+r {} +
             }
             for d in $foreign {
-                reportProblem "conf perms" $"foreign hm dir ($d): fix its owner and run conf perms again" --quiet
+                reportProblem "cfg perms" $"foreign hm dir ($d): fix its owner and run cfg perms again" --quiet
             }
             if ($foreign | is-not-empty) { exit 1 }
         }

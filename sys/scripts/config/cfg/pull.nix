@@ -1,6 +1,6 @@
 { vars }:
 ''
-        # Usage: conf pull [--host (-h) <host|cur|com>] [--quiet (-q)]
+        # Usage: cfg pull [--host (-h) <host|cur|com>] [--quiet (-q)]
         def "main pull" [--host(-h): string, --quiet(-q)] {
             checkNoForeign
             let repos = if ($host | is-not-empty) { [ (hostRepo $host) ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }

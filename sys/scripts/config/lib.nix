@@ -73,7 +73,7 @@ in rec {
         def checkNoForeign [] {
             let foreign = (foreignHmDirs)
             for d in $foreign {
-                reportProblem "conf" $"foreign hm dir ($d): fix its owner and run conf perms" --quiet
+                reportProblem "cfg" $"foreign hm dir ($d): fix its owner and run cfg perms" --quiet
             }
             if ($foreign | is-not-empty) { exit 1 }
         }
@@ -86,7 +86,7 @@ in rec {
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
                 # the impl does the work as root; going through the wrapper would deadlock on the flock we hold
-                try { ^${conf.impl} commit $msg }
+                try { ^${cfg.impl} commit $msg }
             }
         }
         # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates
@@ -133,5 +133,5 @@ in rec {
         }
     '';
     gen = import ./gen/command.nix { inherit pkgs binPath; };
-    conf = import ./conf/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
+    cfg = import ./cfg/command.nix { inherit lib pkgs vars mkRootCommand commonNu; };
 }

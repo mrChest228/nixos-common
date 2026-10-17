@@ -1,6 +1,6 @@
 { vars }:
 ''
-        # Usage: conf rename <message> [--host (-h) <host|cur|com>] [--single (-s)]
+        # Usage: cfg rename <message> [--host (-h) <host|cur|com>] [--single (-s)]
         def "main rename" [message: string, --host(-h): string, --single(-s)] {
             checkNoForeign
             let target = (currentRepo $host --single=$single)

@@ -12,7 +12,7 @@ let
             dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             ^${scripts.gen}/bin/gen clean
             # activation may have created users from vars.users; their hm dirs get re-owned now
-            ^${scripts.conf.impl} perms
+            ^${scripts.cfg.impl} perms
         }
     '';
 in {
