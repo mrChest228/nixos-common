@@ -44,13 +44,13 @@
             if ($"($repo)/($gitDir)/rebase-merge" | path exists) or ($"($repo)/($gitDir)/rebase-apply" | path exists) {
                 error make { msg: $"($repo): rebase in progress, finish it first" }
             }
-            let branch = (gitSafe $repo symbolic-ref -q --short HEAD | complete)  # fails on detached HEAD
-            if $branch.exit_code != 0 {
+            if (gitSafe $repo symbolic-ref -q HEAD | complete | get exit_code) != 0 {  # fails on detached HEAD
                 error make { msg: $"($repo): detached HEAD" }
             }
-            if ($branch.stdout | str trim) != "main" {  # only main is synced with origin
-                error make { msg: $"($repo): on branch ($branch.stdout | str trim), switch to main first" }
-            }
+        }
+        # name of the checked-out branch; every repo is synced with the same-named branch on origin
+        def repoBranch [repo: string] {
+            gitSafe $repo symbolic-ref -q --short HEAD | complete | get stdout | str trim
         }
         # only DNS/connectivity failures count as offline; auth and other errors are real errors
         def isNetworkError [stderr: string] {
@@ -86,48 +86,52 @@
             gitSafe $repo --no-pager diff --stat $accepted $candidate
             (input $"(ansi red_bold)take origin's history? type yes: (ansi rst)" | str trim) == "yes"
         }
-        # fetches origin's main into origin/candidate and rebases local work on it (uncommitted changes ride along
-        # via --autostash). origin/main is moved to the candidate only when historyKept says the history was not
-        # rewritten: a captured host force-pushing a gutted repo is refused here, so this host keeps its copy and
-        # keeps reporting until someone looks. origin/main is also the lease repoPush checks against, so nothing
-        # is pushed on top of a refused history either. --on-rewrite { |accepted, candidate| -> bool } gets to
+        # fetches origin's <branch> (the one checked out here) into origin/candidate and rebases local work on it
+        # (uncommitted changes ride along via --autostash). origin/<branch> is moved to the candidate only when
+        # historyKept says the history was not rewritten: a captured host force-pushing a gutted repo is refused
+        # here, so this host keeps its copy and keeps reporting until someone looks. origin/<branch> is also the
+        # lease repoPush checks against, so nothing is pushed on top of a refused history either. --on-rewrite { |accepted, candidate| -> bool } gets to
         # decide instead of refusing (cfg sync passes confirmRewrite); nothing automatic may pass it.
         # returns { online: bool, changed: bool }; with --pause skips the fetch if FETCH_HEAD is fresh
         def repoSync [repo: string, --pause, --on-rewrite: closure] {
             checkRepoState $repo
+            let branch = (repoBranch $repo)
             let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)
             let fetchHead = $"($repo)/($gitDir)/FETCH_HEAD"
             if $pause and ($fetchHead | path exists) and (((date now) - (ls -D $fetchHead | get 0 | get modified)) < 3min) {
                 return { online: true, changed: false }
             }
             # fetch fails on network errors, rebase fails on conflicts; separate calls tell the two apart
-            # --refmap= stops git from also updating origin/main "opportunistically" through the configured refspec
-            let fetch = (gitSafe $repo fetch --refmap= origin +refs/heads/main:refs/remotes/origin/candidate | complete)
+            # --refmap= stops git from also updating origin/<branch> "opportunistically" through the configured refspec
+            let fetch = (gitSafe $repo fetch --refmap= origin $"+refs/heads/($branch):refs/remotes/origin/candidate" | complete)
             if $fetch.exit_code != 0 {
                 if (isNetworkError $fetch.stderr) {
                     return { online: false, changed: false }
                 }
+                if ($fetch.stderr | str contains "couldn't find remote ref") {  # branch made here, not on origin yet; repoPush creates it
+                    return { online: true, changed: false }
+                }
                 error make { msg: $"($repo): fetch failed\n($fetch.stderr)" }
             }
             let candidate = (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim)
-            let accepted = (gitSafe $repo rev-parse -q --verify origin/main | complete)  # missing before the first sync of a fresh clone
+            let accepted = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete)  # missing before the first sync of a fresh clone or a new branch
             let accepted = if $accepted.exit_code == 0 { $accepted.stdout | str trim } else { null }
             if $accepted != null and not (historyKept $repo $accepted $candidate) {
                 if $on_rewrite == null or not (do $on_rewrite $accepted $candidate) {
                     error make { msg: $"($repo): history on origin was rewritten, local copy kept; compare with origin/candidate, then cfg sync to take it" }
                 }
             }
-            gitSafe $repo update-ref refs/remotes/origin/main $candidate
+            gitSafe $repo update-ref $"refs/remotes/origin/($branch)" $candidate
             let oldHead = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)  # hash of the current commit
             # files changed only by mtime make --autostash bail out; refresh the index stat info first (nonzero when real changes exist)
             try { gitSafe $repo update-index -q --really-refresh } catch { }
             let stashCount = (gitSafe $repo stash list | complete | get stdout | lines | length)  # baseline for the autostash check below
             # --onto: replay only what was committed here after the last accepted origin state; commits a
-            # taken rewrite removed are not resurrected (plain `rebase origin/main` would replay them too)
+            # taken rewrite removed are not resurrected (plain `rebase origin/<branch>` would replay them too)
             let rebase = if $accepted != null {
-                gitSafe $repo rebase --autostash --quiet --onto origin/main $accepted | complete
+                gitSafe $repo rebase --autostash --quiet --onto $candidate $accepted | complete
             } else {
-                gitSafe $repo rebase --autostash --quiet origin/main | complete
+                gitSafe $repo rebase --autostash --quiet $candidate | complete
             }
             if $rebase.exit_code != 0 {
                 if ($"($repo)/($gitDir)/rebase-merge" | path exists) or ($"($repo)/($gitDir)/rebase-apply" | path exists) {
@@ -141,18 +145,19 @@
             }
             { online: true, changed: ((gitSafe $repo rev-parse HEAD | complete | get stdout | str trim) != $oldHead) }
         }
-        # pushes HEAD to origin/main with --force-with-lease; on rejection syncs once and retries
+        # pushes HEAD to origin/<branch> with --force-with-lease; on rejection syncs once and retries
         # returns false when the remote can't be reached (commit stays local)
         def repoPush [repo: string, --no-retry] {
+            let branch = (repoBranch $repo)
             let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
-            let remote = (gitSafe $repo rev-parse origin/main | complete | get stdout | str trim)  # remote tip; local == remote means nothing to push
+            let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)  # remote tip (empty for a branch origin lacks); local == remote means nothing to push
             if $local == $remote {
                 return true
             }
             gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
             let start = (date now)
-            # --force-with-lease overwrites origin/main only if it still matches what we fetched
-            mut res = (gitSafe $repo push --force-with-lease origin HEAD:main | complete)
+            # --force-with-lease overwrites origin/<branch> only if it still matches what we fetched
+            mut res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
             if $res.exit_code != 0 {
                 if (isNetworkError $res.stderr) {
                     # offline: keep the commit local, the timer or a later push sends it
@@ -164,7 +169,7 @@
                 }
                 # remote moved between our fetch and push: sync again and retry once
                 repoSync $repo
-                $res = (gitSafe $repo push --force-with-lease origin HEAD:main | complete)
+                $res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
                 if $res.exit_code != 0 {
                     if (isNetworkError $res.stderr) {
                         print ((ansi yellow) + $repo + ": not pushed (offline), will be pushed later" + (ansi rst))
