@@ -44,8 +44,12 @@
             if ($"($repo)/($gitDir)/rebase-merge" | path exists) or ($"($repo)/($gitDir)/rebase-apply" | path exists) {
                 error make { msg: $"($repo): rebase in progress, finish it first" }
             }
-            if (gitSafe $repo symbolic-ref -q HEAD | complete | get exit_code) != 0 {  # fails on detached HEAD
+            let branch = (gitSafe $repo symbolic-ref -q --short HEAD | complete)  # fails on detached HEAD
+            if $branch.exit_code != 0 {
                 error make { msg: $"($repo): detached HEAD" }
+            }
+            if ($branch.stdout | str trim) != "main" {  # only main is synced with origin
+                error make { msg: $"($repo): on branch ($branch.stdout | str trim), switch to main first" }
             }
         }
         # only DNS/connectivity failures count as offline; auth and other errors are real errors
@@ -54,9 +58,42 @@
               "No route to host" "Connection timed out" "Connection refused" ]
             | any { |pat| $stderr | str contains $pat }
         }
-        # fetches origin/main and rebases local work on it (uncommitted changes ride along via --autostash)
+        # true when candidate keeps every commit of accepted, except that the tip may be amended with the same
+        # tree (what cfg rename does): fast-forward, or accepted's parent is still there and the first commit
+        # after it has accepted's tree
+        def historyKept [repo: string, accepted: string, candidate: string] {
+            if (gitSafe $repo merge-base --is-ancestor $accepted $candidate | complete | get exit_code) == 0 { return true }
+            let parent = (gitSafe $repo rev-parse -q --verify $"($accepted)^" | complete)  # fails when accepted is the root commit
+            let firstAfter = if $parent.exit_code == 0 {
+                let parent = ($parent.stdout | str trim)
+                if (gitSafe $repo merge-base --is-ancestor $parent $candidate | complete | get exit_code) != 0 { return false }
+                gitSafe $repo rev-list --reverse --ancestry-path $"($parent)..($candidate)" | complete | get stdout | lines
+            } else {
+                gitSafe $repo rev-list --max-parents=0 $candidate | complete | get stdout | lines
+            }
+            if ($firstAfter | is-empty) { return false }  # the tip was deleted, not amended
+            let tree = { |rev| gitSafe $repo rev-parse $"($rev)^{tree}" | complete | get stdout | str trim }
+            (do $tree $firstAfter.0) == (do $tree $accepted)
+        }
+        # shows what a rewritten origin history drops and brings, in red, and asks; true = take it
+        def confirmRewrite [repo: string, accepted: string, candidate: string] {
+            print -e $"(ansi red_bold)($repo): history on origin was rewritten(ansi rst)"
+            print -e $"(ansi red_bold)commits that would be lost:(ansi rst)"
+            gitSafe $repo --no-pager log --oneline $"($candidate)..($accepted)"
+            print -e $"(ansi red_bold)commits that would come instead:(ansi rst)"
+            gitSafe $repo --no-pager log --oneline $"($accepted)..($candidate)"
+            print -e $"(ansi red_bold)file changes between them:(ansi rst)"
+            gitSafe $repo --no-pager diff --stat $accepted $candidate
+            (input $"(ansi red_bold)take origin's history? type yes: (ansi rst)" | str trim) == "yes"
+        }
+        # fetches origin's main into origin/candidate and rebases local work on it (uncommitted changes ride along
+        # via --autostash). origin/main is moved to the candidate only when historyKept says the history was not
+        # rewritten: a captured host force-pushing a gutted repo is refused here, so this host keeps its copy and
+        # keeps reporting until someone looks. origin/main is also the lease repoPush checks against, so nothing
+        # is pushed on top of a refused history either. --on-rewrite { |accepted, candidate| -> bool } gets to
+        # decide instead of refusing (cfg sync passes confirmRewrite); nothing automatic may pass it.
         # returns { online: bool, changed: bool }; with --pause skips the fetch if FETCH_HEAD is fresh
-        def repoSync [repo: string, --pause] {
+        def repoSync [repo: string, --pause, --on-rewrite: closure] {
             checkRepoState $repo
             let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)
             let fetchHead = $"($repo)/($gitDir)/FETCH_HEAD"
@@ -64,18 +101,34 @@
                 return { online: true, changed: false }
             }
             # fetch fails on network errors, rebase fails on conflicts; separate calls tell the two apart
-            let fetch = (gitSafe $repo fetch origin main | complete)
+            # --refmap= stops git from also updating origin/main "opportunistically" through the configured refspec
+            let fetch = (gitSafe $repo fetch --refmap= origin +refs/heads/main:refs/remotes/origin/candidate | complete)
             if $fetch.exit_code != 0 {
                 if (isNetworkError $fetch.stderr) {
                     return { online: false, changed: false }
                 }
                 error make { msg: $"($repo): fetch failed\n($fetch.stderr)" }
             }
+            let candidate = (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim)
+            let accepted = (gitSafe $repo rev-parse -q --verify origin/main | complete)  # missing before the first sync of a fresh clone
+            let accepted = if $accepted.exit_code == 0 { $accepted.stdout | str trim } else { null }
+            if $accepted != null and not (historyKept $repo $accepted $candidate) {
+                if $on_rewrite == null or not (do $on_rewrite $accepted $candidate) {
+                    error make { msg: $"($repo): history on origin was rewritten, local copy kept; compare with origin/candidate, then cfg sync to take it" }
+                }
+            }
+            gitSafe $repo update-ref refs/remotes/origin/main $candidate
             let oldHead = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)  # hash of the current commit
             # files changed only by mtime make --autostash bail out; refresh the index stat info first (nonzero when real changes exist)
             try { gitSafe $repo update-index -q --really-refresh } catch { }
             let stashCount = (gitSafe $repo stash list | complete | get stdout | lines | length)  # baseline for the autostash check below
-            let rebase = (gitSafe $repo rebase --autostash --quiet origin/main | complete)
+            # --onto: replay only what was committed here after the last accepted origin state; commits a
+            # taken rewrite removed are not resurrected (plain `rebase origin/main` would replay them too)
+            let rebase = if $accepted != null {
+                gitSafe $repo rebase --autostash --quiet --onto origin/main $accepted | complete
+            } else {
+                gitSafe $repo rebase --autostash --quiet origin/main | complete
+            }
             if $rebase.exit_code != 0 {
                 if ($"($repo)/($gitDir)/rebase-merge" | path exists) or ($"($repo)/($gitDir)/rebase-apply" | path exists) {
                     gitSafe $repo rebase --abort
