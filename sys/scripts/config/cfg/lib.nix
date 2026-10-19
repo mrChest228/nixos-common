@@ -75,16 +75,16 @@
             let tree = { |rev| gitSafe $repo rev-parse $"($rev)^{tree}" | complete | get stdout | str trim }
             (do $tree $firstAfter.0) == (do $tree $accepted)
         }
-        # shows what a rewritten origin history drops and brings, in red, and asks; true = take it
+        # shows what a rewritten origin history drops and brings (git's own colours, only the headline is red) and asks; true = take it
         def confirmRewrite [repo: string, accepted: string, candidate: string] {
             print -e $"(ansi red_bold)($repo): history on origin was rewritten(ansi rst)"
-            print -e $"(ansi red_bold)commits that would be lost:(ansi rst)"
+            print "commits that would be lost:"
             gitSafe $repo --no-pager log --oneline $"($candidate)..($accepted)"
-            print -e $"(ansi red_bold)commits that would come instead:(ansi rst)"
+            print "commits that would come instead:"
             gitSafe $repo --no-pager log --oneline $"($accepted)..($candidate)"
-            print -e $"(ansi red_bold)file changes between them:(ansi rst)"
+            print "file changes between them:"
             gitSafe $repo --no-pager diff --stat $accepted $candidate
-            (input $"(ansi red_bold)take origin's history? type yes: (ansi rst)" | str trim) == "yes"
+            (input "take origin's history? type yes: " | str trim) == "yes"
         }
         # fetches origin's <branch> (the one checked out here) into origin/candidate and rebases local work on it
         # (uncommitted changes ride along via --autostash). origin/<branch> is moved to the candidate only when
