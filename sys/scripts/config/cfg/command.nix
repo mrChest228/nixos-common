@@ -6,6 +6,7 @@ let
         (import ./rename.nix { inherit vars; })
         (import ./pull.nix { inherit vars; })
         (import ./push.nix { inherit vars; })
+        (import ./sync.nix { inherit vars; })
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
 in scripts.mkRootFlockCommand "cfg" ''
