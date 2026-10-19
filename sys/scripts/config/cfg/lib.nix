@@ -199,8 +199,25 @@
             }
         }
         # commits everything in the repo with the owner's colored change list; returns true when a commit was made
+        # direct inputs of the working tree's flake.lock that HEAD's flake.lock does not have
+        def newFlakeInputs [repo: string] {
+            let inputs = { |lock|
+                try {
+                    let nodes = ($lock | from json)
+                    $nodes.nodes | get $nodes.root | get inputs | columns
+                } catch { [] }
+            }
+            let before = (do $inputs (gitSafe $repo show HEAD:flake.lock | complete | get stdout))
+            let now = (do $inputs (try { open --raw $"($repo)/flake.lock" } catch { "" }))
+            $now | where { |i| $i not-in $before }
+        }
         def commitRepo [repo: string, message: string] {
             cd $repo
+            # a new input is the quiet way for unknown code to enter the system: name it loudly before it is committed
+            let newInputs = (newFlakeInputs $repo)
+            if not ($newInputs | is-empty) {
+                print -e $"(ansi red_bold)($repo): new flake inputs: ($newInputs | str join ' ')(ansi rst)"
+            }
             gitSafe $repo add .
             if not ((gitSafe $repo status -s | complete | get stdout) | is-empty) {
                 echo "File changes:"
