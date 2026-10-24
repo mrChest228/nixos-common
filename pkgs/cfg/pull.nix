@@ -13,11 +13,11 @@
                 for branch in $branches {
                     let res = (try {
                         if $branch == $current {
-                            let sync = (repoSync $repo --quiet-catastrophe)
+                            let sync = (repoSync $repo)
                             if $sync.state? == "catastrophe" {
-                                $sync
+                                $sync | upsert localInputs (localFlakeInputs $repo "worktree")
                             } else {
-                                { online: $sync.online, state: ($sync.state? | default "up-to-date"), branch: $branch, diff: $sync.diff?, localFiles: (worktreeFiles $repo) }
+                                { online: $sync.online, state: ($sync.state? | default "up-to-date"), branch: $branch, diff: $sync.diff?, localFiles: (worktreeFiles $repo), localInputs: (localFlakeInputs $repo "worktree"), remoteInputs: ($sync.remoteInputs? | default []) }
                             }
                         } else {
                             repoSyncBranch $repo $branch "pull"
@@ -30,7 +30,7 @@
                         $ok = false
                     } else if not $res.online {
                         if not $quiet {
-                            print $"(ansi yellow)($repo): offline, pull skipped(ansi rst)"
+                            print $"($REPORT_COLOR.yellow)($repo): offline, pull skipped($REPORT_COLOR.reset)"
                         }
                         break
                     } else if $res.state == "catastrophe" {
