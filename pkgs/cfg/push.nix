@@ -8,7 +8,7 @@
             for repo in $repos {
                 let current = (repoBranch $repo)
                 let branches = if $quiet { repoBranches $repo } else { [ $current ] }
-                if not $quiet { printRepoHeading $repo }
+                printRepoHeading $repo
                 for branch in $branches {
                     let res = (try {
                         if $branch == $current {

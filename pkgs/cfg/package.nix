@@ -12,6 +12,7 @@
 # Examples:
 #   cfg commit "niri: blur"
 #   cfg rename "niri: blur"
+#   cfg rename "niri: blur" -1   # rename the commit before the last one
 #   cfg push --host cur
 { lib, pkgs, vars, com, cur }:
 let

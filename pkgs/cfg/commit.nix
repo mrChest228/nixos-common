@@ -12,8 +12,7 @@
 
             if not ($single and $target != $common) {
                 repoSync $common --pause
-                commitRepo $common $msg
-                repoPush $common
+                commitAndPush $common $msg
             }
 
             if $target == $common {
@@ -28,8 +27,7 @@
                 if not $single and (lockedRev $repo) != (gitSafe $common rev-parse HEAD | complete | get stdout | str trim) {  # common's current commit
                     updateCommonLock $repo
                 }
-                commitRepo $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg })
-                repoPush $repo
+                commitAndPush $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg })
             }
             main perms
         }

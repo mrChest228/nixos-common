@@ -7,19 +7,19 @@
             mut ok = true
             for repo in $repos {
                 let current = (repoBranch $repo)
-            let branches = if $quiet { repoBranches $repo } else { [ $current ] }
-                if not $quiet { printRepoHeading $repo }
-            for branch in $branches {
-                let res = (try {
-                    if $branch == $current {
-                        let sync = (repoSync $repo --quiet-catastrophe)
-                        if $sync.state? == "catastrophe" {
-                            $sync
+                let branches = if $quiet { repoBranches $repo } else { [ $current ] }
+                printRepoHeading $repo
+                for branch in $branches {
+                    let res = (try {
+                        if $branch == $current {
+                            let sync = (repoSync $repo --quiet-catastrophe)
+                            if $sync.state? == "catastrophe" {
+                                $sync
+                            } else {
+                                { online: $sync.online, state: (if $sync.changed { "updated" } else { "up-to-date" }), branch: $branch, diff: $sync.diff? }
+                            }
                         } else {
-                            { online: $sync.online, state: (if $sync.changed { "updated" } else { "up-to-date" }), branch: $branch, diff: $sync.diff? }
-                        }
-                    } else {
-                        repoSyncBranch $repo $branch "pull"
+                            repoSyncBranch $repo $branch "pull"
                         }
                     } catch { |e|
                         reportProblem $repo ($e.msg? | default $"($e)") --quiet=$quiet

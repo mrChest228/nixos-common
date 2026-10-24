@@ -92,13 +92,13 @@
                 print $"            (ansi red)($rename.old) -> ($rename.new)(ansi rst)"
             }
         }
-        def printPushed [commits: list<record>] {
+        def printPushed [commits: list<record>, --same-local] {
             if ($commits | is-empty) { return }
-            print "        local:"
+            if not $same_local { print "        local:" }
             printCommits (glyph "↑" "^") $commits
         }
         def printCatastrophe [branch: string, diff: record] {
-            print -e $"(ansi red_bold)CATASTROPHE: origin deleted ($diff.deleted | length) commits of ($branch), branch skipped(ansi rst)"
+            print -e $"        (ansi red_bold)CATASTROPHE: origin deleted ($diff.deleted | length) commits of ($branch), branch skipped(ansi rst)"
             for entry in [
                 { label: "deleted:", commits: $diff.deleted }
                 { label: "came instead:", commits: $diff.added }
@@ -121,12 +121,13 @@
         }
         def printQuietCatastrophe [repo: string, branch: string, result: record] {
             let marker = (catastropheMarkerPath $repo $branch)
+            print $"    (ansi cyan)($branch):(ansi rst)"
             if ($marker | path exists) {
                 let previous = (open --raw $marker | str trim)
                 if $previous == $result.candidate {
                     let short = (gitSafe $repo rev-parse --short $result.candidate | complete | get stdout | str trim)
                     let unresolved = ($repo + "/" + $branch + ": CATASTROPHE still unresolved (origin " + $short + "), branch skipped")
-                    print -e ((ansi red_bold) + $unresolved + (ansi rst))
+                    print -e ("        " + (ansi red_bold) + $unresolved + (ansi rst))
                     return
                 }
             }
@@ -142,6 +143,7 @@
         }
         def printBranchResult [repo: string, branch: string, result: record] {
             if $result.state == "catastrophe" {
+                print $"    (ansi cyan)($branch):(ansi rst)"
                 printCatastrophe $branch $result.diff
                 return
             }
@@ -543,8 +545,19 @@
                 silent { gitSafe $repo commit -m $message }
                 true
             } else {
-                print $"(ansi cyan)Nothing to commit(ansi rst)"
+                printRepoHeading $repo
+                print $"    (ansi dark_gray)(repoBranch $repo):  nothing to commit(ansi rst)"
                 false
+            }
+        }
+        def commitAndPush [repo: string, message: string] {
+            let committed = (commitRepo $repo $message)
+            let branch = (repoBranch $repo)
+            let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
+            let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
+            let commits = (commitsToPush $repo $remote $local)
+            if (repoPush $repo --report) {
+                if $committed { printPushed $commits --same-local } else { printPushed $commits }
             }
         }
         # commit message format: "<HOST>: <message>" (or "Commit <date>" when no message is given)
