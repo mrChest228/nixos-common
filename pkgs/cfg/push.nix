@@ -13,19 +13,20 @@
                 for branch in $branches {
                     let res = (try {
                         if $branch == $current {
-                            let sync = (repoSync $repo --quiet-catastrophe)
+                            let sync = (repoSync $repo)
                             if $sync.state? == "catastrophe" {
                                 $sync
                             } else if not $sync.online {
                                 { online: false, state: "offline", branch: $branch }
                             } else {
                                 let files = (worktreeFiles $repo)
+                                let inputs = (localFlakeInputs $repo "worktree")
                                 let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
                                 let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
                                 let commits = (commitsToPush $repo $remote $local)
                                 let pushed = (repoPush $repo --report)
                                 if $pushed.state == "catastrophe" {
-                                    (($pushed | upsert localFiles $files) | upsert remoteDiff $sync.diff?)
+                                    ((($pushed | upsert localFiles $files) | upsert localInputs $inputs) | upsert remoteDiff $sync.diff?) | upsert remoteInputs ($sync.remoteInputs? | default [])
                                 } else {
                                     {
                                         online: $pushed.online
@@ -33,6 +34,8 @@
                                         branch: $branch
                                         diff: $sync.diff?
                                         localFiles: $files
+                                        localInputs: $inputs
+                                        remoteInputs: ($sync.remoteInputs? | default [])
                                         pushed: (if $pushed.state in [ "pushed" "offline" ] { $commits } else { [] })
                                     }
                                 }
@@ -48,7 +51,7 @@
                         $ok = false
                     } else if not $res.online {
                         if not $quiet {
-                            print $"(ansi yellow)($repo): offline, push skipped(ansi rst)"
+                            print $"($REPORT_COLOR.yellow)($repo): offline, push skipped($REPORT_COLOR.reset)"
                         }
                         break
                     } else if $res.state == "catastrophe" {
