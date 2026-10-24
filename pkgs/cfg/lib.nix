@@ -113,6 +113,33 @@
                 }
             }
         }
+        def catastropheMarkerPath [repo: string, branch: string] {
+            let root = ($env.NIXOS_CONFIG_REPORTED_DIR? | default "/run/nixos-config-reported")
+            let repoName = ($repo | path basename)
+            let safeBranch = ($branch | str replace --all "/" "_")
+            [$root $"($repoName)-($safeBranch)"] | path join
+        }
+        def printQuietCatastrophe [repo: string, branch: string, result: record] {
+            let marker = (catastropheMarkerPath $repo $branch)
+            if ($marker | path exists) {
+                let previous = (open --raw $marker | str trim)
+                if $previous == $result.candidate {
+                    let short = (gitSafe $repo rev-parse --short $result.candidate | complete | get stdout | str trim)
+                    let unresolved = ($repo + "/" + $branch + ": CATASTROPHE still unresolved (origin " + $short + "), branch skipped")
+                    print -e ((ansi red_bold) + $unresolved + (ansi rst))
+                    return
+                }
+            }
+            printCatastrophe $branch $result.diff
+            mkdir ($marker | path dirname)
+            $result.candidate | save --force $marker
+        }
+        def clearCatastropheMarker [repo: string, branch: string] {
+            let marker = (catastropheMarkerPath $repo $branch)
+            if ($marker | path exists) {
+                rm $marker
+            }
+        }
         def printBranchResult [repo: string, branch: string, result: record] {
             if $result.state == "catastrophe" {
                 printCatastrophe $branch $result.diff

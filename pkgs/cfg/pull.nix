@@ -33,9 +33,14 @@
                         }
                         break
                     } else if $res.state == "catastrophe" {
-                        printBranchResult $repo $branch $res
+                        if $quiet {
+                            printQuietCatastrophe $repo $branch $res
+                        } else {
+                            printBranchResult $repo $branch $res
+                        }
                         $ok = false
                     } else {
+                        if $quiet { clearCatastropheMarker $repo $branch }
                         printBranchResult $repo $branch $res
                     }
                 }
