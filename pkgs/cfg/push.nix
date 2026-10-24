@@ -8,15 +8,21 @@
             for repo in $repos {
                 let current = (repoBranch $repo)
                 let branches = if $quiet { repoBranches $repo } else { [ $current ] }
+                if not $quiet { printRepoHeading $repo }
                 for branch in $branches {
                     let res = (try {
                         if $branch == $current {
-                            let sync = (repoSync $repo)
-                            if not $sync.online {
+                            let sync = (repoSync $repo --quiet-catastrophe)
+                            if $sync.state? == "catastrophe" {
+                                $sync
+                            } else if not $sync.online {
                                 { online: false, state: "offline", branch: $branch }
                             } else {
-                                let pushed = (repoPush $repo)
-                                { online: $pushed, state: (if $pushed { "pushed" } else { "offline" }), branch: $branch }
+                                let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
+                                let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
+                                let commits = (commitsToPush $repo $remote $local)
+                                let pushed = (repoPush $repo --report)
+                                { online: $pushed, state: (if $pushed { "pushed" } else { "offline" }), branch: $branch, diff: $sync.diff?, pushed: (if $pushed { $commits } else { [] }) }
                             }
                         } else {
                             repoSyncBranch $repo $branch "push"
@@ -33,10 +39,10 @@
                         }
                         break
                     } else if $res.state == "catastrophe" {
-                        reportProblem $"($repo)/($branch)" "origin history was rewritten; branch skipped" --quiet=$quiet
+                        printBranchResult $repo $branch $res
                         $ok = false
-                    } else if $res.state == "both-moved" {
-                        print $"(ansi yellow)($repo)/($branch): both local and origin have new commits, switch to it to sync(ansi rst)"
+                    } else {
+                        printBranchResult $repo $branch $res
                     }
                 }
             }

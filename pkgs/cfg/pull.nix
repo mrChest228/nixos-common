@@ -7,14 +7,19 @@
             mut ok = true
             for repo in $repos {
                 let current = (repoBranch $repo)
-                let branches = if $quiet { repoBranches $repo } else { [ $current ] }
-                for branch in $branches {
-                    let res = (try {
-                        if $branch == $current {
-                            let sync = (repoSync $repo)
-                            { online: $sync.online, state: (if $sync.changed { "updated" } else { "up-to-date" }), branch: $branch }
+            let branches = if $quiet { repoBranches $repo } else { [ $current ] }
+                if not $quiet { printRepoHeading $repo }
+            for branch in $branches {
+                let res = (try {
+                    if $branch == $current {
+                        let sync = (repoSync $repo --quiet-catastrophe)
+                        if $sync.state? == "catastrophe" {
+                            $sync
                         } else {
-                            repoSyncBranch $repo $branch "pull"
+                            { online: $sync.online, state: (if $sync.changed { "updated" } else { "up-to-date" }), branch: $branch, diff: $sync.diff? }
+                        }
+                    } else {
+                        repoSyncBranch $repo $branch "pull"
                         }
                     } catch { |e|
                         reportProblem $repo ($e.msg? | default $"($e)") --quiet=$quiet
@@ -28,10 +33,10 @@
                         }
                         break
                     } else if $res.state == "catastrophe" {
-                        reportProblem $"($repo)/($branch)" "origin history was rewritten; branch skipped" --quiet=$quiet
+                        printBranchResult $repo $branch $res
                         $ok = false
-                    } else if $res.state == "both-moved" {
-                        print $"(ansi yellow)($repo)/($branch): both local and origin have new commits, switch to it to sync(ansi rst)"
+                    } else {
+                        printBranchResult $repo $branch $res
                     }
                 }
             }

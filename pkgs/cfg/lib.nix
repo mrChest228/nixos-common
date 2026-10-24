@@ -67,6 +67,78 @@
                 gitSafe $repo update-ref $ref $rev
             }
         }
+        def glyph [uni: string, ascii: string] {
+            let term = ($env.TERM? | default "")
+            let locales = [ ($env.LC_ALL? | default "") ($env.LC_CTYPE? | default "") ($env.LANG? | default "") ]
+            let hasUtf8 = ($locales | any { |locale|
+                let value = ($locale | str lowercase)
+                ($value | str contains "utf-8") or ($value | str contains "utf8")
+            })
+            if $term == "linux" or not $hasUtf8 { $ascii } else { $uni }
+        }
+        def printRepoHeading [repo: string] {
+            print $"(ansi white_bold)($repo | path basename)(ansi rst)"
+        }
+        def printCommits [label: string, commits: list<record>] {
+            for commit in $commits {
+                print $"            ($label) (ansi magenta)($commit.hash | str substring 0..7)(ansi rst) ($commit.subject)"
+            }
+        }
+        def printRemoteDiff [diff: record] {
+            if ($diff.added | is-empty) and ($diff.renamed | is-empty) { return }
+            print "        remote:"
+            printCommits (glyph "↓" "v") $diff.added
+            for rename in $diff.renamed {
+                print $"            (ansi red)($rename.old) -> ($rename.new)(ansi rst)"
+            }
+        }
+        def printPushed [commits: list<record>] {
+            if ($commits | is-empty) { return }
+            print "        local:"
+            printCommits (glyph "↑" "^") $commits
+        }
+        def printCatastrophe [branch: string, diff: record] {
+            print -e $"(ansi red_bold)CATASTROPHE: origin deleted ($diff.deleted | length) commits of ($branch), branch skipped(ansi rst)"
+            for entry in [
+                { label: "deleted:", commits: $diff.deleted }
+                { label: "came instead:", commits: $diff.added }
+            ] {
+                print $"        ($entry.label)"
+                for commit in ($entry.commits | first 10) {
+                    print $"            (ansi magenta)($commit.hash | str substring 0..7)(ansi rst) ($commit.subject)"
+                }
+                let more = ($entry.commits | length) - (($entry.commits | first 10) | length)
+                if $more > 0 {
+                    print $"            (ansi dark_gray)(glyph "…" "...") ($more) more(ansi rst)"
+                }
+            }
+        }
+        def printBranchResult [repo: string, branch: string, result: record] {
+            if $result.state == "catastrophe" {
+                printCatastrophe $branch $result.diff
+                return
+            }
+            if $result.state == "both-moved" {
+                print $"    (ansi cyan)($branch):(ansi rst)"
+                print $"        (ansi yellow)(glyph "→" ">") both local and origin have new commits, switch to it to sync(ansi rst)"
+                return
+            }
+            let diff = $result.diff?
+            let pushed = $result.pushed? | default []
+            let remoteChanged = $diff != null and (($diff.added | is-not-empty) or ($diff.renamed | is-not-empty)) and $result.state != "local-ahead" and $result.state != "pushed"
+            let localChanged = ($pushed | is-not-empty) or ($result.state == "local-ahead" and $diff != null and ($diff.added | is-not-empty))
+            if not $remoteChanged and not $localChanged {
+                print $"    (ansi dark_gray)($branch):  up to date(ansi rst)"
+            } else {
+                print $"    (ansi cyan)($branch):(ansi rst)"
+                if $remoteChanged { printRemoteDiff $diff }
+                if ($pushed | is-not-empty) { printPushed $pushed }
+                if $result.state == "local-ahead" and $diff != null {
+                    print "        local:"
+                    printCommits "" $diff.added
+                }
+            }
+        }
         # only DNS/connectivity failures count as offline; auth and other errors are real errors
         def isNetworkError [stderr: string] {
             [ "Could not resolve" "Temporary failure in name resolution" "Network is unreachable"
@@ -79,6 +151,13 @@
                     hash: $hash
                     subject: (gitSafe $repo log -1 --format=%s $hash | complete | get stdout | str trim)
                 }
+            }
+        }
+        def commitsToPush [repo: string, remote: string, local: string] {
+            if $remote == "" {
+                historyCommits $repo (gitSafe $repo rev-list --reverse --first-parent $local | complete | get stdout | lines)
+            } else {
+                (historyDiff $repo $remote $local).added
             }
         }
         # checks first-parent trees, allowing message-only renames but no deleted or changed commits
@@ -172,7 +251,7 @@
         # lease repoPush checks against, so nothing is pushed on top of a refused history either. --on-rewrite { |accepted, candidate| -> bool } gets to
         # decide instead of refusing (cfg sync passes confirmRewrite); nothing automatic may pass it.
         # returns { online: bool, changed: bool }; with --pause skips the fetch if FETCH_HEAD is fresh
-        def repoSync [repo: string, --pause, --on-rewrite: closure] {
+        def repoSync [repo: string, --pause, --on-rewrite: closure, --quiet-catastrophe] {
             checkRepoState $repo
             let branch = (repoBranch $repo)
             let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)
@@ -197,13 +276,14 @@
             let accepted = if $accepted.exit_code == 0 { $accepted.stdout | str trim } else { null }
             let diff = if $accepted == null { null } else { historyDiff $repo $accepted $candidate }
             if $accepted != null and not $diff.kept {
-                if $on_rewrite == null or not (do $on_rewrite $accepted $candidate) {
+                if $on_rewrite != null {
+                    if not (do $on_rewrite $accepted $candidate) {
+                        return { online: true, changed: false, state: "catastrophe", branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate }
+                    }
+                } else if $quiet_catastrophe {
+                    return { online: true, changed: false, state: "catastrophe", branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate }
+                } else {
                     error make { msg: $"($repo): history on origin was rewritten, local copy kept; compare with origin/candidate, then cfg sync to take it" }
-                }
-            }
-            if $diff != null {
-                for rename in $diff.renamed {
-                    print $"(ansi red)origin renamed: ($rename.old) -> ($rename.new)(ansi rst)"
                 }
             }
             gitSafe $repo update-ref $"refs/remotes/origin/($branch)" $candidate
@@ -228,11 +308,17 @@
             if ((gitSafe $repo stash list | complete | get stdout | lines | length) > $stashCount) or ($rebase.stderr | str contains "safe in the stash") {
                 error make { msg: $"($repo): local changes were kept in the stash, apply it manually" }
             }
-            { online: true, changed: ((gitSafe $repo rev-parse HEAD | complete | get stdout | str trim) != $oldHead) }
+            {
+                online: true
+                changed: ((gitSafe $repo rev-parse HEAD | complete | get stdout | str trim) != $oldHead)
+                branch: $branch
+                diff: $diff
+                candidate: $candidate
+            }
         }
         # pushes HEAD to origin/<branch> with --force-with-lease; on rejection syncs once and retries
         # returns false when the remote can't be reached (commit stays local)
-        def repoPush [repo: string, --no-retry] {
+        def repoPush [repo: string, --no-retry, --report] {
             let branch = (repoBranch $repo)
             let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
             let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)  # remote tip (empty for a branch origin lacks); local == remote means nothing to push
@@ -242,7 +328,9 @@
             if $remote != "" and not (historyDiff $repo $remote $local).kept {
                 error make { msg: $"($repo): ($branch): local branch changed or dropped commits that are on origin, not pushed" }
             }
-            gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
+            if not $report {
+                gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
+            }
             let start = (date now)
             # --force-with-lease overwrites origin/<branch> only if it still matches what we fetched
             mut res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
@@ -271,7 +359,9 @@
                     error make { msg: $"($repo): push failed\n($res.stderr)" }
                 }
             }
-            print $"(ansi green_bold)Successful push in ((date now) - $start)(ansi rst)"
+            if not $report {
+                print $"(ansi green_bold)Successful push in ((date now) - $start)(ansi rst)"
+            }
             true
         }
         # syncs one local branch without checking it out
@@ -298,7 +388,7 @@
                         error make { msg: $"($repo): push of new branch ($branch) failed\n($pushed.stderr)" }
                     }
                     updateRemoteBranchRef $repo $branch $local
-                    return { online: true, state: "pushed", branch: $branch, pushed: [] }
+                    return { online: true, state: "pushed", branch: $branch, pushed: (commitsToPush $repo "" $local) }
                 }
                 error make { msg: $"($repo): fetch of branch ($branch) failed\n($fetch.stderr)" }
             }
@@ -376,11 +466,10 @@
             if not ($newInputs | is-empty) {
                 print -e $"(ansi red_bold)($repo): new flake inputs: ($newInputs | str join ' ')(ansi rst)"
             }
-            gitSafe $repo add .
             if not ((gitSafe $repo status -s | complete | get stdout) | is-empty) {
-                echo "File changes:"
-
-                # changes with time printing
+                printRepoHeading $repo
+                print $"    (ansi cyan)(repoBranch $repo):(ansi rst)"
+                print "        local:"
                 let colors = [
                     { code: "?", color: (ansi dark_gray) }
                     { code: "!", color: (ansi dark_gray) }
@@ -400,8 +489,10 @@
                         break
                     }
                     let line = ($changesGit | get $i)
-                    let x = ($line | str substring 0..0)
+                    let status = ($line | str substring 0..1 | str trim)
+                    let x = if ($status | str contains "A") { "A" } else if ($status | str contains "M") { "M" } else if ($status | str contains "D") { "D" } else if ($status | str contains "R") { "R" } else if ($status | str contains "C") { "C" } else if ($status | str contains "T") { "T" } else if ($status == "??") { "?" } else { $status | str substring 0..0 }
                     let color = ($colors | where code == $x | if ($in | length) != 1 { ansi red } else { $in | first | get color })
+                    let symbol = if $x == "A" { "+" } else if $x == "D" { "-" } else if $x == "M" { "~" } else if $x == "R" { glyph "→" ">" } else { $x }
                     mut pths = [($line | str substring 3..)]
                     if ($x == "R" or $x == "C") {
                         $i = $i + 1
@@ -418,9 +509,10 @@
                     }
 
                     let pthTo = if ($pths | length) == 2 { $" -> ($pths | get 0)" } else { "" }
-                    print $"($color)($x)  ($pths | last)($pthTo)(ansi rst) ($time)"
+                    print $"            ($color)($symbol)  ($pths | last)($pthTo)(ansi rst) ($time)"
                     $i = $i + 1
                 }
+                gitSafe $repo add .
                 silent { gitSafe $repo commit -m $message }
                 true
             } else {
