@@ -2,7 +2,6 @@
     programs.git = {
         enable = true;
         config = {
-            safe.directory = [ "${vars.configPath}/*" ];
             user = {
                 name = "mrChest228";
                 email = "gengenm32111111@gmail.com";

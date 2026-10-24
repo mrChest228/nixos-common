@@ -1,4 +1,16 @@
-{ lib, pkgs, vars, com }:
+# gen — lists, switches, deletes and cleans system, HM and user-profile generations
+# Root-only actions re-run through sudo when started by a user; gen does not take the config lock.
+# Installed by sys/config/gen.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
+# Usage:
+#   gen del [...ids]
+#   gen switch <id>
+#   gen clean
+#   gen list
+#   gen ls
+# Examples:
+#   gen list
+#   gen clean
+{ lib, pkgs, vars, com, cur }:
 let
     scripts = import ../_lib.nix { inherit lib pkgs vars com; };
 in pkgs.writeScriptBin "gen" ''

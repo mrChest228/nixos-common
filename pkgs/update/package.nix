@@ -1,7 +1,14 @@
-{ config, lib, pkgs, vars, com, cur, ... }:
+# update — updates flake inputs and creates a bootable system generation
+# Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
+# Installed and wired (sudo rule) by sys/config/update.nix; calls cfg commit and gen clean.
+# Usage: update [message?]
+# Examples:
+#   update
+#   update "refresh inputs"
+{ lib, pkgs, vars, com, cur }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
-    cmd = scripts.mkRootFlockCommand "update" ''
+    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
+in (scripts.mkRootFlockCommand "update" ''
         ${scripts.nuSwitch}
         def main [message?: string] {
             checkNoForeign
@@ -15,14 +22,7 @@ let
             ^${pkgs.nh}/bin/nh os boot -R -H ${vars.host} ${vars.configPath}/cur
             homeSwitchAll
             dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
-            ^/run/current-system/sw/bin/gen clean
+            ^${pkgs.gen}/bin/gen clean
             print "Reboot to apply the changes"
         }
-    '';
-in {
-    environment.systemPackages = [ cmd.command ];
-    security.sudo.extraRules = [{
-        groups = [ "wheel" ];
-        commands = [{ command = "${cmd.command}/bin/update"; options = [ "NOPASSWD" ]; }];
-    }];
-}
+    '').command

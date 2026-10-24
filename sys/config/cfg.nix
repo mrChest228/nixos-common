@@ -1,18 +1,15 @@
-{ config, lib, pkgs, vars, com, cur, ... }:
-let
-    cfg = import ./command.nix { inherit lib pkgs vars com; };
-in {
-    environment.systemPackages = [ cfg.command ];
+{ config, lib, pkgs, vars, ... }: {
+    environment.systemPackages = [ pkgs.cfg ];
     security.sudo.extraRules = [{
         groups = [ "wheel" ];
-        commands = [{ command = "${cfg.command}/bin/cfg"; options = [ "NOPASSWD" ]; }];
+        commands = [{ command = "${pkgs.cfg}/bin/cfg"; options = [ "NOPASSWD" ]; }];
     }];
     systemd.services.cfg-perms = {
         description = "Fix ownership and modes of config repos";
         wantedBy = [ "multi-user.target" ];
         serviceConfig = {
             Type = "oneshot";
-            ExecStart = "${cfg.command}/bin/cfg perms";
+            ExecStart = "${pkgs.cfg}/bin/cfg perms";
         };
     };
     # a root-created hm/<user> must be handed to that user; minimal-chown keeps this from retriggering itself
@@ -25,8 +22,8 @@ in {
         serviceConfig = {
             Type = "oneshot";
             ExecStart = [
-                "${cfg.command}/bin/cfg pull --quiet"
-                "${cfg.command}/bin/cfg push --quiet"
+                "${pkgs.cfg}/bin/cfg pull --quiet"
+                "${pkgs.cfg}/bin/cfg push --quiet"
             ];
             # syncing never delays real work
             CPUSchedulingPolicy = "idle";

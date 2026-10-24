@@ -87,8 +87,6 @@ rec {
         }
     '';
     # nuBase plus what only the switching commands (update, rebuild, reconf) need.
-    # cfg and gen are run as installed in the current system, not by store path: this file must not depend
-    # on the command packages (cfg/default.nix and gen/default.nix build them from here)
     nuSwitch = ''
         ${nuBase}
         def commitIfChanged [prefix: string, message?: string] {
@@ -96,7 +94,7 @@ rec {
             let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
-                try { ^/run/current-system/sw/bin/cfg commit $msg }
+                try { ^${pkgs.cfg}/bin/cfg commit $msg }
             }
         }
         # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates
@@ -138,7 +136,7 @@ rec {
                 | where { |e| $e.type == "symlink" and ($e.name | path basename | str starts-with "system-") }
                 | where { |e| ((^${pkgs.coreutils}/bin/readlink -f $e.name | complete).stdout | str trim) == $lstGen })
             if (($lstLinks | length) == 1) {
-                ^/run/current-system/sw/bin/gen del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
+                ^${pkgs.gen}/bin/gen del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
             }
         }
     '';
