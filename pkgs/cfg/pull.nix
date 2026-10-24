@@ -5,10 +5,11 @@
             checkNoForeign
             let repos = if ($host | is-not-empty) { [ (hostRepo $host) ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }
             mut ok = true
+            mut anyPrinted = false
             for repo in $repos {
                 let current = (repoBranch $repo)
                 let branches = if $quiet { repoBranches $repo } else { [ $current ] }
-                printRepoHeading $repo
+                mut results = []
                 for branch in $branches {
                     let res = (try {
                         if $branch == $current {
@@ -16,7 +17,7 @@
                             if $sync.state? == "catastrophe" {
                                 $sync
                             } else {
-                                { online: $sync.online, state: (if $sync.changed { "updated" } else { "up-to-date" }), branch: $branch, diff: $sync.diff? }
+                                { online: $sync.online, state: ($sync.state? | default "up-to-date"), branch: $branch, diff: $sync.diff?, localFiles: (worktreeFiles $repo) }
                             }
                         } else {
                             repoSyncBranch $repo $branch "pull"
@@ -33,21 +34,19 @@
                         }
                         break
                     } else if $res.state == "catastrophe" {
-                        if $quiet {
-                            printQuietCatastrophe $repo $branch $res
-                        } else {
-                            printBranchResult $repo $branch $res
-                        }
                         $ok = false
                     } else {
-                        if $quiet { clearCatastropheMarker $repo $branch }
-                        printBranchResult $repo $branch $res
+                        clearCatastropheMarker $repo $branch
                     }
+                    if $res != null and $res.online { $results = ($results | append { branch: $branch, result: $res }) }
                 }
+                let printed = (printRepoResults $repo $results --quiet=$quiet)
+                $anyPrinted = $anyPrinted or $printed
             }
             main perms
             if not $ok {
                 exit 1
             }
+            if not $quiet and not $anyPrinted { printEverythingUpToDate }
         }
 ''

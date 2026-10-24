@@ -5,10 +5,11 @@
             checkNoForeign
             let repos = if ($host | is-not-empty) { [ (hostRepo $host) ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }
             mut ok = true
+            mut anyPrinted = false
             for repo in $repos {
                 let current = (repoBranch $repo)
                 let branches = if $quiet { repoBranches $repo } else { [ $current ] }
-                printRepoHeading $repo
+                mut results = []
                 for branch in $branches {
                     let res = (try {
                         if $branch == $current {
@@ -18,11 +19,23 @@
                             } else if not $sync.online {
                                 { online: false, state: "offline", branch: $branch }
                             } else {
+                                let files = (worktreeFiles $repo)
                                 let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
                                 let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
                                 let commits = (commitsToPush $repo $remote $local)
                                 let pushed = (repoPush $repo --report)
-                                { online: $pushed, state: (if $pushed { "pushed" } else { "offline" }), branch: $branch, diff: $sync.diff?, pushed: (if $pushed { $commits } else { [] }) }
+                                if $pushed.state == "catastrophe" {
+                                    (($pushed | upsert localFiles $files) | upsert remoteDiff $sync.diff?)
+                                } else {
+                                    {
+                                        online: $pushed.online
+                                        state: (if $sync.state? == "rewritten" { "rewritten" } else if $pushed.state == "offline" { "local-ahead" } else { $pushed.state })
+                                        branch: $branch
+                                        diff: $sync.diff?
+                                        localFiles: $files
+                                        pushed: (if $pushed.state in [ "pushed" "offline" ] { $commits } else { [] })
+                                    }
+                                }
                             }
                         } else {
                             repoSyncBranch $repo $branch "push"
@@ -39,21 +52,19 @@
                         }
                         break
                     } else if $res.state == "catastrophe" {
-                        if $quiet {
-                            printQuietCatastrophe $repo $branch $res
-                        } else {
-                            printBranchResult $repo $branch $res
-                        }
                         $ok = false
                     } else {
-                        if $quiet { clearCatastropheMarker $repo $branch }
-                        printBranchResult $repo $branch $res
+                        clearCatastropheMarker $repo $branch
                     }
+                    if $res != null and $res.online { $results = ($results | append { branch: $branch, result: $res }) }
                 }
+                let printed = (printRepoResults $repo $results --quiet=$quiet)
+                $anyPrinted = $anyPrinted or $printed
             }
             main perms
             if not $ok {
                 exit 1
             }
+            if not $quiet and not $anyPrinted { printEverythingUpToDate }
         }
 ''
