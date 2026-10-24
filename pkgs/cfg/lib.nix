@@ -126,7 +126,7 @@
                 let previous = (open --raw $marker | str trim)
                 if $previous == $result.candidate {
                     let short = (gitSafe $repo rev-parse --short $result.candidate | complete | get stdout | str trim)
-                    let unresolved = ($repo + "/" + $branch + ": CATASTROPHE still unresolved (origin " + $short + "), branch skipped")
+                    let unresolved = ("CATASTROPHE still unresolved (origin " + $short + "), branch skipped")
                     print -e ("        " + (ansi red_bold) + $unresolved + (ansi rst))
                     return
                 }
@@ -495,6 +495,7 @@
             if not ($newInputs | is-empty) {
                 print -e $"(ansi red_bold)($repo): new flake inputs: ($newInputs | str join ' ')(ansi rst)"
             }
+            gitSafe $repo add .
             if not ((gitSafe $repo status -s | complete | get stdout) | is-empty) {
                 printRepoHeading $repo
                 print $"    (ansi cyan)(repoBranch $repo):(ansi rst)"
@@ -541,7 +542,6 @@
                     print $"            ($color)($symbol)  ($pths | last)($pthTo)(ansi rst) ($time)"
                     $i = $i + 1
                 }
-                gitSafe $repo add .
                 silent { gitSafe $repo commit -m $message }
                 true
             } else {
