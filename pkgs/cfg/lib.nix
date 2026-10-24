@@ -52,6 +52,21 @@
         def repoBranch [repo: string] {
             gitSafe $repo symbolic-ref -q --short HEAD | complete | get stdout | str trim
         }
+        def repoBranches [repo: string] {
+            gitSafe $repo for-each-ref '--format=%(refname:short)' refs/heads/ | complete | get stdout | lines
+        }
+        def updateRemoteBranchRef [repo: string, branch: string, rev: string] {
+            let ref = $"refs/remotes/origin/($branch)"
+            let current = (gitSafe $repo rev-parse -q --verify $ref | complete)
+            if $current.exit_code == 0 {
+                let old = ($current.stdout | str trim)
+                if $old != $rev {
+                    gitSafe $repo update-ref $ref $rev $old
+                }
+            } else {
+                gitSafe $repo update-ref $ref $rev
+            }
+        }
         # only DNS/connectivity failures count as offline; auth and other errors are real errors
         def isNetworkError [stderr: string] {
             [ "Could not resolve" "Temporary failure in name resolution" "Network is unreachable"
@@ -258,6 +273,71 @@
             }
             print $"(ansi green_bold)Successful push in ((date now) - $start)(ansi rst)"
             true
+        }
+        # syncs one local branch without checking it out
+        def repoSyncBranch [repo: string, branch: string, action: string, --on-rewrite: closure] {
+            checkRepoState $repo
+            let local = (gitSafe $repo rev-parse $"refs/heads/($branch)" | complete | get stdout | str trim)
+            let acceptedResult = (gitSafe $repo rev-parse -q --verify $"refs/remotes/origin/($branch)" | complete)
+            let accepted = if $acceptedResult.exit_code == 0 { $acceptedResult.stdout | str trim } else { null }
+            let fetch = (gitSafe $repo fetch --refmap= origin $"+refs/heads/($branch):refs/remotes/origin/candidate" | complete)
+            if $fetch.exit_code != 0 {
+                if (isNetworkError $fetch.stderr) {
+                    return { online: false, state: "offline", branch: $branch }
+                }
+                if ($fetch.stderr | str contains "couldn't find remote ref") {
+                    if $action == "pull" {
+                        return { online: true, state: "origin-missing", branch: $branch }
+                    }
+                    let lease = $"--force-with-lease=refs/heads/($branch):"
+                    let pushed = (gitSafe $repo push $lease origin $"refs/heads/($branch):refs/heads/($branch)" | complete)
+                    if $pushed.exit_code != 0 {
+                        if (isNetworkError $pushed.stderr) {
+                            return { online: false, state: "offline", branch: $branch }
+                        }
+                        error make { msg: $"($repo): push of new branch ($branch) failed\n($pushed.stderr)" }
+                    }
+                    updateRemoteBranchRef $repo $branch $local
+                    return { online: true, state: "pushed", branch: $branch, pushed: [] }
+                }
+                error make { msg: $"($repo): fetch of branch ($branch) failed\n($fetch.stderr)" }
+            }
+            let candidate = (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim)
+            let base = if $accepted == null { $candidate } else { $accepted }
+            if $local == $base {
+                let diff = (historyDiff $repo $base $candidate)
+                if not $diff.kept {
+                    if $on_rewrite == null or not (do $on_rewrite $base $candidate) {
+                        return { online: true, state: "catastrophe", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+                    }
+                }
+                if $local != $candidate {
+                    gitSafe $repo update-ref $"refs/heads/($branch)" $candidate $local
+                }
+                updateRemoteBranchRef $repo $branch $candidate
+                return { online: true, state: (if $local == $candidate { "up-to-date" } else { "updated" }), branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+            }
+            if $candidate == $base {
+                let diff = (historyDiff $repo $base $local)
+                if not $diff.kept {
+                    return { online: true, state: "catastrophe", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+                }
+                if $action == "pull" {
+                    if $accepted == null { updateRemoteBranchRef $repo $branch $candidate }
+                    return { online: true, state: "local-ahead", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+                }
+                let lease = $"--force-with-lease=refs/heads/($branch):($base)"
+                let pushed = (gitSafe $repo push $lease origin $"refs/heads/($branch):refs/heads/($branch)" | complete)
+                if $pushed.exit_code != 0 {
+                    if (isNetworkError $pushed.stderr) {
+                        return { online: false, state: "offline", branch: $branch }
+                    }
+                    error make { msg: $"($repo): push of branch ($branch) failed\n($pushed.stderr)" }
+                }
+                updateRemoteBranchRef $repo $branch $local
+                return { online: true, state: "pushed", branch: $branch, diff: $diff, accepted: $base, candidate: $local }
+            }
+            { online: true, state: "both-moved", branch: $branch, local: $local, candidate: $candidate }
         }
         # revision of the common input recorded in the repo's flake.lock (null if absent)
         def lockedRev [repo: string] {
