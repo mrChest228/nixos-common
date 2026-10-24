@@ -30,10 +30,8 @@ in pkgs.writeScriptBin "gen" ''
         let stc = $"/nix/var/nix/profiles/system-($id)-link/bin/switch-to-configuration"
         ^$stc switch
     }
-    ${
-        # Deletes old system, HM and user-profile generations without GC (--nogc --nogcroots); clean handles the store.
-        ""
-    }def "main clean" [] {
+    # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean
+    def "main clean" [] {
         rootOrSudo clean
         ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --nogc --nogcroots
         ^/run/current-system/bin/switch-to-configuration boot

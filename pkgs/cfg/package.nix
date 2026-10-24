@@ -3,12 +3,12 @@
 # Installed and wired (sudo rule, cfg-sync/cfg-perms services) by sys/config/cfg.nix.
 # Called by update, rebuild and reconf for commits and permissions.
 # Usage:
-#   cfg commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)]
-#   cfg rename <message> [--host (-h) <host|cur|com>] [--single (-s)]
-#   cfg pull [--host (-h) <host|cur|com>] [--quiet (-q)]
-#   cfg push [--host (-h) <host|cur|com>] [--quiet (-q)]
-#   cfg sync [--host (-h) <host|cur|com>]
-#   cfg perms
+#   cfg commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)] — commit and push changes
+#   cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)] — rename this or an earlier commit
+#   cfg pull [--host (-h) <host|cur|com>] [--quiet (-q)] — fetch and rebase from origin
+#   cfg push [--host (-h) <host|cur|com>] [--quiet (-q)] — sync, then push local commits
+#   cfg sync [--host (-h) <host|cur|com>] [--all (-a)] — sync branches, confirming origin rewrites
+#   cfg perms — repair config repository permissions
 # Examples:
 #   cfg commit "niri: blur"
 #   cfg rename "niri: blur"
