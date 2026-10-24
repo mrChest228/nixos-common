@@ -1,6 +1,52 @@
 { vars }:
 ''
-        # Usage: cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)]
+        # Usage: cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)] [--help]
+        # n is an optional negative offset: omitted or -0 renames HEAD; -1 renames its parent.
+        const RENAME_USAGE = "Usage: cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)] [--help]"
+        def parseRenameArgs [args: list<string>] {
+            mut offset = 0
+            mut hasOffset = false
+            mut host = ""
+            mut hasHost = false
+            mut single = false
+            mut messages = []
+            mut i = 0
+            loop {
+                if $i >= ($args | length) { break }
+                let arg = ($args | get $i)
+                if $arg == "--help" {
+                    print $RENAME_USAGE
+                    return null
+                } else if $arg in [ "--host" "-h" ] {
+                    if $hasHost or ($i + 1) >= ($args | length) {
+                        error make { msg: $RENAME_USAGE }
+                    }
+                    $i = $i + 1
+                    $host = ($args | get $i)
+                    $hasHost = true
+                } else if $arg in [ "--single" "-s" ] {
+                    $single = true
+                } else if $arg =~ '^-\d+$' {
+                    if $hasOffset {
+                        error make { msg: $RENAME_USAGE }
+                    }
+                    $offset = ($arg | into int)
+                    $hasOffset = true
+                } else {
+                    $messages = ($messages | append $arg)
+                }
+                $i = $i + 1
+            }
+            if ($messages | length) != 1 {
+                error make { msg: $RENAME_USAGE }
+            }
+            {
+                message: ($messages | first)
+                offset: $offset
+                host: $host
+                single: $single
+            }
+        }
         def historyCommit [repo: string, old: string, parent: string, message: string] {
             let tree = (gitSafe $repo rev-parse $"($old)^{tree}" | complete | get stdout | str trim)
             let author = {
@@ -51,12 +97,17 @@
             gitSafe $repo update-ref HEAD $newHead $head
             $newHead
         }
-        def "main rename" [message: string, n?: int, --host(-h): string, --single(-s)] {
+        def --wrapped "main rename" [...args: string] {
+            let parsed = (parseRenameArgs $args)
+            if $parsed == null { return }
+            let message = $parsed.message
+            let offset = $parsed.offset
+            let host = $parsed.host
+            let single = $parsed.single
             checkNoForeign
             let target = (currentRepo $host --single=$single)
             let common = "${vars.configPath}/common"
             let newMsg = (buildMessage $message)
-            let offset = ($n | default 0)
             let distance = if $offset < 0 { 0 - $offset } else { $offset }
 
             # sync first, so the last commit and the lease are fresh
