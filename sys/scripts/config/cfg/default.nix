@@ -10,7 +10,6 @@ in {
     systemd.services.cfg-perms = {
         description = "Fix ownership and modes of config repos";
         wantedBy = [ "multi-user.target" ];
-        path = [ pkgs.acl pkgs.coreutils pkgs.findutils pkgs.nushell pkgs.util-linux ];
         serviceConfig = {
             Type = "oneshot";
             ExecStart = "${cfg.command}/bin/cfg perms";
@@ -23,7 +22,6 @@ in {
     };
     systemd.services.cfg-sync = {
         description = "Pull and push the config repos";
-        path = [ pkgs.acl pkgs.bash pkgs.coreutils pkgs.findutils pkgs.git pkgs.nix pkgs.nushell pkgs.openssh pkgs.systemd pkgs.util-linux ];
         serviceConfig = {
             Type = "oneshot";
             ExecStart = [
