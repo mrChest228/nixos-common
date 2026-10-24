@@ -264,6 +264,10 @@
         }
         # shows what a rewritten origin history drops and brings (git's own colours, only the headline is red) and asks; true = take it
         def confirmRewrite [repo: string, accepted: string, candidate: string] {
+            let sudoUser = ($env.SUDO_USER? | default "")
+            if not (is-admin) or ($sudoUser | is-empty) or not (is-terminal --stdin) {
+                return false
+            }
             print -e $"(ansi red_bold)($repo): history on origin was rewritten(ansi rst)"
             print "commits that would be lost:"
             gitSafe $repo --no-pager log --oneline $"($candidate)..($accepted)"
