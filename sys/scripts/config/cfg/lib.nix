@@ -154,6 +154,9 @@
             if $local == $remote {
                 return true
             }
+            if $remote != "" and not (historyKept $repo $remote $local) {
+                error make { msg: $"($repo): ($branch): local branch dropped commits that are on origin, not pushed" }
+            }
             gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
             let start = (date now)
             # --force-with-lease overwrites origin/<branch> only if it still matches what we fetched
@@ -169,6 +172,11 @@
                 }
                 # remote moved between our fetch and push: sync again and retry once
                 repoSync $repo
+                let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
+                let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
+                if $remote != "" and not (historyKept $repo $remote $local) {
+                    error make { msg: $"($repo): ($branch): local branch dropped commits that are on origin, not pushed" }
+                }
                 $res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
                 if $res.exit_code != 0 {
                     if (isNetworkError $res.stderr) {
