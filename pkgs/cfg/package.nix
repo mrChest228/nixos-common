@@ -26,9 +26,12 @@ let
         (import ./sync.nix { inherit vars; })
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
+    definitions = lib.concatStringsSep "\n" (map
+        (file: import file { inherit pkgs vars; })
+        [ ./report.nix ./history.nix ./sync-lib.nix ./inputs.nix ./lib.nix ]);
 in (scripts.mkRootFlockCommand "cfg" ''
     ${scripts.nuBase}
-    ${import ./lib.nix { inherit pkgs vars; }}
+    ${definitions}
     ${subcommands}
     # bare `cfg` shows the generated help
     def main [] { help main }

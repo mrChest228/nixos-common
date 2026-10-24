@@ -20,9 +20,7 @@
                     if ((^${pkgs.coreutils}/bin/stat -c %U $hm | complete).stdout | str trim) != "root" { ^${pkgs.coreutils}/bin/chown root $hm }
                     if not (((^${pkgs.coreutils}/bin/stat -c %a $hm | complete).stdout | str trim) in [ "1755" "1775" ]) { ^${pkgs.coreutils}/bin/chmod 1755 $hm }
                     let wantAcl = [ "user::rwx" $"user:($firstUser):rwx" "group::r-x" "mask::rwx" "other::r-x" ] | str join "\n"
-                    if ((^${pkgs.acl}/bin/getfacl -cp $hm | complete).stdout | str trim) != $wantAcl {
-                        ^${pkgs.acl}/bin/setfacl -b -m $"mask::rwx,u:($firstUser):rwx" $hm
-                    }
+                    if ((^${pkgs.acl}/bin/getfacl -cp $hm | complete).stdout | str trim) != $wantAcl { ^${pkgs.acl}/bin/setfacl -b -m $"mask::rwx,u:($firstUser):rwx" $hm }
                     for dir in (^${pkgs.findutils}/bin/find $hm -mindepth 1 -maxdepth 1 -type d | lines) {
                         if ($foreign | any { |d| $d == $dir }) { continue }
                         let name = ($dir | path basename)

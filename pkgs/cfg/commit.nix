@@ -3,9 +3,7 @@
         # Usage: cfg commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)] [--no-add (-n)]
         def "main commit" [message?: string, --host(-h): string, --all(-a), --single(-s), --no-add(-n)] {
             checkNoForeign
-            if $all and $single {
-                error make { msg: "--all and --single can't be used together" }
-            }
+            if $all and $single { error make { msg: "--all and --single can't be used together" } }
             let target = (currentRepo $host --single=$single)
             let common = "${vars.configPath}/common"
             let msg = (buildMessage $message)
@@ -29,7 +27,7 @@
                 let sync = (repoSync $repo --pause)
                 if $sync.online { clearCatastropheMarker $repo (repoBranch $repo) }
                 # re-lock only when common's HEAD actually moved
-                if not $single and (lockedRev $repo) != (gitSafe $common rev-parse HEAD | complete | get stdout | str trim) {  # common's current commit
+                if not $single and (lockedRev $repo) != (gitOut $common rev-parse HEAD) {  # common's current commit
                     updateCommonLock $repo
                 }
                 let printed = (commitAndPush $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg }) $sync.diff? ($sync.remoteInputs? | default []) --no-add=$no_add)

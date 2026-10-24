@@ -18,18 +18,14 @@
                     print $RENAME_USAGE
                     return null
                 } else if $arg in [ "--host" "-h" ] {
-                    if $hasHost or ($i + 1) >= ($args | length) {
-                        error make { msg: $RENAME_USAGE }
-                    }
+                    if $hasHost or ($i + 1) >= ($args | length) { error make { msg: $RENAME_USAGE } }
                     $i = $i + 1
                     $host = ($args | get $i)
                     $hasHost = true
                 } else if $arg in [ "--single" "-s" ] {
                     $single = true
                 } else if $arg =~ '^-\d+$' {
-                    if $hasOffset {
-                        error make { msg: $RENAME_USAGE }
-                    }
+                    if $hasOffset { error make { msg: $RENAME_USAGE } }
                     $offset = ($arg | into int)
                     $hasOffset = true
                 } else {
@@ -37,52 +33,29 @@
                 }
                 $i = $i + 1
             }
-            if ($messages | length) != 1 {
-                error make { msg: $RENAME_USAGE }
-            }
-            {
-                message: ($messages | first)
-                offset: $offset
-                host: $host
-                single: $single
-            }
+            if ($messages | length) != 1 { error make { msg: $RENAME_USAGE } }
+            { message: ($messages | first), offset: $offset, host: $host, single: $single }
         }
         def historyCommit [repo: string, old: string, parent: string, message: string] {
-            let tree = (gitSafe $repo rev-parse $"($old)^{tree}" | complete | get stdout | str trim)
-            let author = {
-                name: (gitSafe $repo log -1 --format=%an $old | complete | get stdout | str trim)
-                email: (gitSafe $repo log -1 --format=%ae $old | complete | get stdout | str trim)
-                date: (gitSafe $repo log -1 --format=%aI $old | complete | get stdout | str trim)
-            }
+            let tree = (gitOut $repo rev-parse $"($old)^{tree}")
+            let author = { name: (gitOut $repo log -1 --format=%an $old), email: (gitOut $repo log -1 --format=%ae $old), date: (gitOut $repo log -1 --format=%aI $old) }
             let result = (with-env {
                 GIT_AUTHOR_NAME: $author.name
                 GIT_AUTHOR_EMAIL: $author.email
                 GIT_AUTHOR_DATE: $author.date
             } {
-                if $parent == "" {
-                    $message | gitSafe $repo commit-tree $tree -F - | complete
-                } else {
-                    $message | gitSafe $repo commit-tree $tree -p $parent -F - | complete
-                }
+                if $parent == "" { $message | gitSafe $repo commit-tree $tree -F - | complete } else { $message | gitSafe $repo commit-tree $tree -p $parent -F - | complete }
             })
-            if $result.exit_code != 0 {
-                error make { msg: $"($repo): commit-tree failed\n($result.stderr)" }
-            }
+            if $result.exit_code != 0 { error make { msg: $"($repo): commit-tree failed\n($result.stderr)" } }
             $result.stdout | str trim
         }
         def rewriteCommitHistory [repo: string, target: string, message: string] {
-            let head = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
-            if (gitSafe $repo merge-base --is-ancestor $target $head | complete | get exit_code) != 0 {
-                error make { msg: $"($repo): rename target is not an ancestor of HEAD" }
-            }
-            let targetParents = (gitSafe $repo rev-list --parents -n 1 $target | complete | get stdout | str trim | split row " ")
-            if ($targetParents | length) > 2 {
-                error make { msg: $"($repo): cannot rename a merge commit" }
-            }
+            let head = (gitOut $repo rev-parse HEAD)
+            if (gitSafe $repo merge-base --is-ancestor $target $head | complete | get exit_code) != 0 { error make { msg: $"($repo): rename target is not an ancestor of HEAD" } }
+            let targetParents = (gitOut $repo rev-list --parents -n 1 $target | split row " ")
+            if ($targetParents | length) > 2 { error make { msg: $"($repo): cannot rename a merge commit" } }
             let merges = (gitSafe $repo rev-list --merges $"($target)..($head)" | complete | get stdout | lines)
-            if ($merges | is-not-empty) {
-                error make { msg: $"($repo): cannot rename across merge commits" }
-            }
+            if ($merges | is-not-empty) { error make { msg: $"($repo): cannot rename across merge commits" } }
             let parentResult = (gitSafe $repo rev-parse -q --verify $"($target)^" | complete)
             let parent = if $parentResult.exit_code == 0 { $parentResult.stdout | str trim } else { "" }
             let targetMessage = ($message + "\n")
@@ -115,21 +88,19 @@
             repoSync $common
 
             let targetRevision = if $distance == 0 {
-                gitSafe $target rev-parse HEAD | complete | get stdout | str trim
+                gitOut $target rev-parse HEAD
             } else {
                 let result = (gitSafe $target rev-parse -q --verify $"HEAD~($distance)" | complete)
-                if $result.exit_code != 0 {
-                    error make { msg: $"($target): rename offset ($offset) is outside the history" }
-                }
+                if $result.exit_code != 0 { error make { msg: $"($target): rename offset ($offset) is outside the history" } }
                 $result.stdout | str trim
             }
-            let old = (gitSafe $target log -1 --format=%s $targetRevision | complete | get stdout | str trim)
+            let old = (gitOut $target log -1 --format=%s $targetRevision)
             if $old == $newMsg {
                 print "Same name"
                 return
             }
             let commonRevision = if $distance == 0 {
-                gitSafe $common rev-parse HEAD | complete | get stdout | str trim
+                gitOut $common rev-parse HEAD
             } else {
                 let result = (gitSafe $common rev-parse -q --verify $"HEAD~($distance)" | complete)
                 if $result.exit_code == 0 { $result.stdout | str trim } else { null }
@@ -137,23 +108,17 @@
             let commonOld = if $commonRevision == null {
                 ""
             } else {
-                gitSafe $common log -1 --format=%s $commonRevision | complete | get stdout | str trim
+                gitOut $common log -1 --format=%s $commonRevision
             }
             let withCommon = $target == $common or (not $single and $commonOld == $old)
 
-            if $withCommon and $target != $common {
-                print $"Will be renamed in ($target | path basename) + common"
-            } else {
-                print $"Will be renamed only in ($target | path basename)"
-            }
+            if $withCommon and $target != $common { print $"Will be renamed in ($target | path basename) + common" } else { print $"Will be renamed only in ($target | path basename)" }
             let reply = (input "Rename? [Y/n]: " | str lowercase)
-            if not ($reply == "" or $reply == "y" or $reply == "ye" or $reply == "yes") {
-                return
-            }
+            if not ($reply == "" or $reply == "y" or $reply == "ye" or $reply == "yes") { return }
 
             mut targetRelocked = false
             if $withCommon {
-                let oldCommonRev = (gitSafe $common rev-parse HEAD | complete | get stdout | str trim)  # common's hash before the rewrite
+                let oldCommonRev = (gitOut $common rev-parse HEAD)  # common's hash before the rewrite
                 if $distance == 0 {
                     # amend needs --allow-empty: the last commit may carry no changes
                     silent { gitSafe $common commit --amend --allow-empty -m $newMsg }
@@ -168,11 +133,7 @@
                         if (lockedRev $repo) == $oldCommonRev {
                             updateCommonLock $repo
                             # target's new lock goes into its amend below; other repos get their own commit
-                            if $repo != $target {
-                                commitAndPush $repo $"${vars.host}: Common flake has been updated"
-                            } else {
-                                $targetRelocked = true
-                            }
+                            if $repo != $target { commitAndPush $repo $"${vars.host}: Common flake has been updated" } else { $targetRelocked = true }
                         }
                     }
                 }
@@ -180,9 +141,7 @@
             if $target != $common {
                 if $distance == 0 {
                     # only an uncommitted lock change gets staged into the amend
-                    if not ((gitSafe $target status --porcelain -- flake.lock | complete | get stdout) | is-empty) {
-                        gitSafe $target add flake.lock
-                    }
+                    if not ((gitSafe $target status --porcelain -- flake.lock | complete | get stdout) | is-empty) { gitSafe $target add flake.lock }
                     # same --allow-empty reason as above
                     silent { gitSafe $target commit --amend --allow-empty -m $newMsg }
                 } else {
