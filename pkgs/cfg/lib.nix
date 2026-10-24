@@ -58,22 +58,86 @@
               "No route to host" "Connection timed out" "Connection refused" ]
             | any { |pat| $stderr | str contains $pat }
         }
-        # true when candidate keeps every commit of accepted, except that the tip may be amended with the same
-        # tree (what cfg rename does): fast-forward, or accepted's parent is still there and the first commit
-        # after it has accepted's tree
-        def historyKept [repo: string, accepted: string, candidate: string] {
-            if (gitSafe $repo merge-base --is-ancestor $accepted $candidate | complete | get exit_code) == 0 { return true }
-            let parent = (gitSafe $repo rev-parse -q --verify $"($accepted)^" | complete)  # fails when accepted is the root commit
-            let firstAfter = if $parent.exit_code == 0 {
-                let parent = ($parent.stdout | str trim)
-                if (gitSafe $repo merge-base --is-ancestor $parent $candidate | complete | get exit_code) != 0 { return false }
-                gitSafe $repo rev-list --reverse --ancestry-path $"($parent)..($candidate)" | complete | get stdout | lines
-            } else {
-                gitSafe $repo rev-list --max-parents=0 $candidate | complete | get stdout | lines
+        def historyCommits [repo: string, hashes: list<string>] {
+            $hashes | each { |hash|
+                {
+                    hash: $hash
+                    subject: (gitSafe $repo log -1 --format=%s $hash | complete | get stdout | str trim)
+                }
             }
-            if ($firstAfter | is-empty) { return false }  # the tip was deleted, not amended
-            let tree = { |rev| gitSafe $repo rev-parse $"($rev)^{tree}" | complete | get stdout | str trim }
-            (do $tree $firstAfter.0) == (do $tree $accepted)
+        }
+        # checks first-parent trees, allowing message-only renames but no deleted or changed commits
+        def historyDiff [repo: string, accepted: string, candidate: string] {
+            if (gitSafe $repo merge-base --is-ancestor $accepted $candidate | complete | get exit_code) == 0 {
+                let hashes = (gitSafe $repo rev-list --reverse --first-parent $"($accepted)..($candidate)" | complete | get stdout | lines)
+                return {
+                    kept: true
+                    renamed: []
+                    deleted: []
+                    added: (historyCommits $repo $hashes)
+                }
+            }
+
+            let mergeBase = (gitSafe $repo merge-base $accepted $candidate | complete)
+            let base = if $mergeBase.exit_code == 0 { $mergeBase.stdout | str trim } else { null }
+            let aRange = if $base == null { $accepted } else { $"($base)..($accepted)" }
+            let bRange = if $base == null { $candidate } else { $"($base)..($candidate)" }
+            let aHashes = (gitSafe $repo rev-list --reverse --first-parent $aRange | complete | get stdout | lines)
+            let bHashes = (gitSafe $repo rev-list --reverse --first-parent $bRange | complete | get stdout | lines)
+            let aMerges = (gitSafe $repo rev-list --merges --first-parent $aRange | complete | get stdout | lines)
+            let bMerges = (gitSafe $repo rev-list --merges --first-parent $bRange | complete | get stdout | lines)
+            let aMergeIndexes = ($aHashes | enumerate | where { |entry| $entry.item in $aMerges } | get index)
+            let bMergeIndexes = ($bHashes | enumerate | where { |entry| $entry.item in $bMerges } | get index)
+            let aMergeIndex = if ($aMergeIndexes | is-empty) { null } else { $aMergeIndexes | first }
+            let bMergeIndex = if ($bMergeIndexes | is-empty) { null } else { $bMergeIndexes | first }
+            let pairedCount = ([$aHashes $bHashes] | each { |hashes| $hashes | length } | math min)
+            let tree = { |hash| gitSafe $repo rev-parse $"($hash)^{tree}" | complete | get stdout | str trim }
+            let subject = { |hash| gitSafe $repo log -1 --format=%s $hash | complete | get stdout | str trim }
+            mut mismatch = -1
+            mut renamedPairs = []
+            for entry in ($aHashes | enumerate | take $pairedCount) {
+                let oldHash = $entry.item
+                let newHash = ($bHashes | get $entry.index)
+                if (do $tree $oldHash) != (do $tree $newHash) {
+                    $mismatch = $entry.index
+                    break
+                }
+                let oldSubject = (do $subject $oldHash)
+                let newSubject = (do $subject $newHash)
+                if $oldSubject != $newSubject {
+                    $renamedPairs = ($renamedPairs | append {
+                        index: $entry.index
+                        old: $oldSubject
+                        new: $newSubject
+                    })
+                }
+            }
+            if $mismatch < 0 and ($bHashes | length) < ($aHashes | length) {
+                $mismatch = $pairedCount
+            }
+            for mergeIndex in [$aMergeIndex $bMergeIndex] {
+                if $mergeIndex != null and ($mismatch < 0 or $mergeIndex < $mismatch) {
+                    $mismatch = $mergeIndex
+                }
+            }
+            let hasMerges = ($aMerges | is-not-empty) or ($bMerges | is-not-empty)
+            let kept = $mismatch < 0 and not $hasMerges
+            let renamed = $renamedPairs
+                | where { |pair| $mismatch < 0 or $pair.index < $mismatch }
+                | each { |pair| { old: $pair.old, new: $pair.new } }
+            let start = if $mismatch < 0 { 0 } else { $mismatch }
+            let deleted = if $kept { [] } else { historyCommits $repo ($aHashes | skip $start) }
+            let added = if $kept {
+                historyCommits $repo ($bHashes | skip ($aHashes | length))
+            } else {
+                historyCommits $repo ($bHashes | skip $start)
+            }
+            {
+                kept: $kept
+                renamed: $renamed
+                deleted: $deleted
+                added: $added
+            }
         }
         # shows what a rewritten origin history drops and brings (git's own colours, only the headline is red) and asks; true = take it
         def confirmRewrite [repo: string, accepted: string, candidate: string] {
@@ -116,9 +180,15 @@
             let candidate = (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim)
             let accepted = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete)  # missing before the first sync of a fresh clone or a new branch
             let accepted = if $accepted.exit_code == 0 { $accepted.stdout | str trim } else { null }
-            if $accepted != null and not (historyKept $repo $accepted $candidate) {
+            let diff = if $accepted == null { null } else { historyDiff $repo $accepted $candidate }
+            if $accepted != null and not $diff.kept {
                 if $on_rewrite == null or not (do $on_rewrite $accepted $candidate) {
                     error make { msg: $"($repo): history on origin was rewritten, local copy kept; compare with origin/candidate, then cfg sync to take it" }
+                }
+            }
+            if $diff != null {
+                for rename in $diff.renamed {
+                    print $"(ansi red)origin renamed: ($rename.old) -> ($rename.new)(ansi rst)"
                 }
             }
             gitSafe $repo update-ref $"refs/remotes/origin/($branch)" $candidate
@@ -154,8 +224,8 @@
             if $local == $remote {
                 return true
             }
-            if $remote != "" and not (historyKept $repo $remote $local) {
-                error make { msg: $"($repo): ($branch): local branch dropped commits that are on origin, not pushed" }
+            if $remote != "" and not (historyDiff $repo $remote $local).kept {
+                error make { msg: $"($repo): ($branch): local branch changed or dropped commits that are on origin, not pushed" }
             }
             gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
             let start = (date now)
@@ -174,8 +244,8 @@
                 repoSync $repo
                 let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
                 let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
-                if $remote != "" and not (historyKept $repo $remote $local) {
-                    error make { msg: $"($repo): ($branch): local branch dropped commits that are on origin, not pushed" }
+                if $remote != "" and not (historyDiff $repo $remote $local).kept {
+                    error make { msg: $"($repo): ($branch): local branch changed or dropped commits that are on origin, not pushed" }
                 }
                 $res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
                 if $res.exit_code != 0 {
