@@ -72,10 +72,41 @@
             if (gitSafe $repo symbolic-ref -q HEAD | complete | get exit_code) != 0 {  # fails on detached HEAD
                 error make { msg: $"($repo): detached HEAD" }
             }
+            $gitDir
         }
         # name of the checked-out branch; every repo is synced with the same-named branch on origin
         def repoBranch [repo: string] {
             gitSafe $repo symbolic-ref -q --short HEAD | complete | get stdout | str trim
+        }
+        def fetchCandidate [repo: string, branch: string] {
+            let result = (gitSafe $repo fetch --refmap= origin $"+refs/heads/($branch):refs/remotes/origin/candidate" | complete)
+            if $result.exit_code == 0 {
+                { online: true, state: "fetched", candidate: (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim) }
+            } else if (isNetworkError $result.stderr) {
+                { online: false, state: "offline" }
+            } else if ($result.stderr | str contains "couldn't find remote ref") {
+                { online: true, state: "missing" }
+            } else {
+                error make { msg: $"($repo): fetch failed\n($result.stderr)" }
+            }
+        }
+        def pushCandidate [repo: string, branch: string, source: string, accepted: string] {
+            let lease = $"--force-with-lease=refs/heads/($branch):($accepted)"
+            let result = (gitSafe $repo push $lease origin $"($source):refs/heads/($branch)" | complete)
+            if $result.exit_code == 0 {
+                { online: true, state: "pushed" }
+            } else if (isNetworkError $result.stderr) {
+                print ($REPORT_COLOR.yellow + $repo + ": not pushed (offline), will be pushed later" + $REPORT_COLOR.reset)
+                { online: false, state: "offline" }
+            } else {
+                { online: true, state: "rejected", stderr: $result.stderr }
+            }
+        }
+        def pushHistoryState [repo: string, accepted: string, candidate: string, onRewrite: any] {
+            let diff = if $accepted == "" { null } else { historyDiff $repo $accepted $candidate }
+            let invalid = ($diff != null) and not $diff.kept
+            let rewritten = $invalid and $onRewrite != null and (do $onRewrite $accepted $candidate)
+            { diff: $diff, catastrophe: ($invalid and not $rewritten) }
         }
         def repoBranches [repo: string] {
             gitSafe $repo for-each-ref '--format=%(refname:short)' refs/heads/ | complete | get stdout | lines
@@ -345,14 +376,32 @@
               "No route to host" "Connection timed out" "Connection refused" ]
             | any { |pat| $stderr | str contains $pat }
         }
-        def historyCommits [repo: string, hashes: list<string>] {
-            $hashes | each { |hash|
+        def commitRecords [records: list<record>] {
+            $records | each { |entry| { hash: $entry.hash, subject: $entry.subject, date: $entry.date } }
+        }
+        def historyRange [repo: string, range: string] {
+            let result = (gitSafe $repo log --reverse --first-parent '--format=%H%x1f%T%x1f%s%x1f%ad%x1f%P' '--date=format:%Y-%m-%d %H:%M:%S' $range | complete)
+            if $result.exit_code != 0 { error make { msg: $"($repo): history read failed\n($result.stderr)" } }
+            $result.stdout | lines | each { |line|
+                let fields = ($line | split row "\u{1f}")
                 {
-                    hash: $hash
-                    subject: (gitSafe $repo log -1 --format=%s $hash | complete | get stdout | str trim)
-                    date: (gitSafe $repo log -1 --format=%ad '--date=format:%Y-%m-%d %H:%M:%S' $hash | complete | get stdout | str trim)
+                    hash: ($fields | get 0)
+                    tree: ($fields | get 1)
+                    subject: ($fields | get 2)
+                    date: ($fields | get 3)
+                    parents: ($fields | get 4)
                 }
             }
+        }
+        def historyCommits [repo: string, hashes: list<string>] {
+            if ($hashes | is-empty) { return [] }
+            let result = (gitSafe $repo log --no-walk=unsorted '--format=%H%x1f%s%x1f%ad' '--date=format:%Y-%m-%d %H:%M:%S' ...$hashes | complete)
+            if $result.exit_code != 0 { error make { msg: $"($repo): history read failed\n($result.stderr)" } }
+            let records = ($result.stdout | lines | each { |line|
+            let fields = ($line | split row "\u{1f}")
+                { hash: ($fields | get 0), subject: ($fields | get 1), date: ($fields | get 2) }
+            })
+            $hashes | each { |hash| $records | where hash == $hash | first }
         }
         def commitsToPush [repo: string, remote: string, local: string] {
             if $remote == "" {
@@ -373,11 +422,9 @@
         # checks first-parent trees, allowing message-only renames but no deleted or changed commits
         def historyDiff [repo: string, accepted: string, candidate: string] {
             if (gitSafe $repo merge-base --is-ancestor $accepted $candidate | complete | get exit_code) == 0 {
-                let hashes = (gitSafe $repo rev-list --reverse --first-parent $"($accepted)..($candidate)" | complete | get stdout | lines)
-                let added = (historyCommits $repo $hashes)
+                let added = (commitRecords (historyRange $repo $"($accepted)..($candidate)"))
                 return {
                     kept: true
-                    renamed: []
                     deleted: []
                     added: $added
                     events: ($added | each { |commit| { kind: "added", commit: $commit } })
@@ -388,68 +435,41 @@
             let base = if $mergeBase.exit_code == 0 { $mergeBase.stdout | str trim } else { null }
             let aRange = if $base == null { $accepted } else { $"($base)..($accepted)" }
             let bRange = if $base == null { $candidate } else { $"($base)..($candidate)" }
-            let aHashes = (gitSafe $repo rev-list --reverse --first-parent $aRange | complete | get stdout | lines)
-            let bHashes = (gitSafe $repo rev-list --reverse --first-parent $bRange | complete | get stdout | lines)
-            let aMerges = (gitSafe $repo rev-list --merges --first-parent $aRange | complete | get stdout | lines)
-            let bMerges = (gitSafe $repo rev-list --merges --first-parent $bRange | complete | get stdout | lines)
-            let aMergeIndexes = ($aHashes | enumerate | where { |entry| $entry.item in $aMerges } | get index)
-            let bMergeIndexes = ($bHashes | enumerate | where { |entry| $entry.item in $bMerges } | get index)
-            let aMergeIndex = if ($aMergeIndexes | is-empty) { null } else { $aMergeIndexes | first }
-            let bMergeIndex = if ($bMergeIndexes | is-empty) { null } else { $bMergeIndexes | first }
-            let pairedCount = ([$aHashes $bHashes] | each { |hashes| $hashes | length } | math min)
-            let tree = { |hash| gitSafe $repo rev-parse $"($hash)^{tree}" | complete | get stdout | str trim }
-            let subject = { |hash| gitSafe $repo log -1 --format=%s $hash | complete | get stdout | str trim }
+            let aRecords = (historyRange $repo $aRange)
+            let bRecords = (historyRange $repo $bRange)
+            let aHashes = ($aRecords | get hash)
+            let bHashes = ($bRecords | get hash)
+            let aMerges = ($aRecords | where { |entry| (($entry.parents | split row " ") | length) > 1 })
+            let bMerges = ($bRecords | where { |entry| (($entry.parents | split row " ") | length) > 1 })
+            let pairedCount = ([$aRecords $bRecords] | each { |records| $records | length } | math min)
             mut mismatch = -1
-            mut renamedPairs = []
             mut rewriteEvents = []
-            for entry in ($aHashes | enumerate | take $pairedCount) {
-                let oldHash = $entry.item
-                let newHash = ($bHashes | get $entry.index)
-                if (do $tree $oldHash) != (do $tree $newHash) {
+            for entry in ($aRecords | enumerate | take $pairedCount) {
+                let old = $entry.item
+                let new = ($bRecords | get $entry.index)
+                if $old.tree != $new.tree {
                     $mismatch = $entry.index
                     break
                 }
-                let oldSubject = (do $subject $oldHash)
-                let newSubject = (do $subject $newHash)
-                if $oldHash != $newHash {
+                if $old.hash != $new.hash {
                     let event = {
-                        kind: (if $oldSubject != $newSubject { "renamed" } else { "rehashed" })
-                        oldHash: $oldHash
-                        newHash: $newHash
-                        oldSubject: $oldSubject
-                        newSubject: $newSubject
-                        date: (gitSafe $repo log -1 --format=%ad '--date=format:%Y-%m-%d %H:%M:%S' $newHash | complete | get stdout | str trim)
+                        kind: (if $old.subject != $new.subject { "renamed" } else { "rehashed" })
+                        oldHash: $old.hash
+                        newHash: $new.hash
+                        oldSubject: $old.subject
+                        newSubject: $new.subject
+                        date: $new.date
                     }
                     $rewriteEvents = ($rewriteEvents | append $event)
                 }
-                if $oldSubject != $newSubject {
-                    $renamedPairs = ($renamedPairs | append {
-                        index: $entry.index
-                        old: $oldSubject
-                        new: $newSubject
-                    })
-                }
             }
-            if $mismatch < 0 and ($bHashes | length) < ($aHashes | length) {
+            if $mismatch < 0 and ($bRecords | length) < ($aRecords | length) {
                 $mismatch = $pairedCount
             }
-            for mergeIndex in [$aMergeIndex $bMergeIndex] {
-                if $mergeIndex != null and ($mismatch < 0 or $mergeIndex < $mismatch) {
-                    $mismatch = $mergeIndex
-                }
-            }
-            let hasMerges = ($aMerges | is-not-empty) or ($bMerges | is-not-empty)
-            let kept = $mismatch < 0 and not $hasMerges
-            let renamed = $renamedPairs
-                | where { |pair| $mismatch < 0 or $pair.index < $mismatch }
-                | each { |pair| { old: $pair.old, new: $pair.new } }
+            let kept = $mismatch < 0 and ($aMerges | is-empty) and ($bMerges | is-empty)
             let start = if $mismatch < 0 { 0 } else { $mismatch }
-            let deleted = if $kept { [] } else { historyCommits $repo ($aHashes | skip $start) }
-            let added = if $kept {
-                historyCommits $repo ($bHashes | skip ($aHashes | length))
-            } else {
-                historyCommits $repo ($bHashes | skip $start)
-            }
+            let deleted = if $kept { [] } else { commitRecords ($aRecords | skip $start) }
+            let added = if $kept { commitRecords ($bRecords | skip ($aRecords | length)) } else { commitRecords ($bRecords | skip $start) }
             let events = if $kept {
                 $rewriteEvents ++ ($added | each { |commit| { kind: "added", commit: $commit } })
             } else {
@@ -457,7 +477,6 @@
             }
             {
                 kept: $kept
-                renamed: $renamed
                 deleted: $deleted
                 added: $added
                 events: $events
@@ -469,14 +488,24 @@
             if not (is-admin) or ($sudoUser | is-empty) or not (is-terminal --stdin) {
                 return false
             }
-            print -e $"(ansi red_bold)($repo): history on origin was rewritten(ansi rst)"
-            print "commits that would be lost:"
-            gitSafe $repo --no-pager log --oneline $"($candidate)..($accepted)"
-            print "commits that would come instead:"
-            gitSafe $repo --no-pager log --oneline $"($accepted)..($candidate)"
-            print "file changes between them:"
-            gitSafe $repo --no-pager diff --stat $accepted $candidate
+            let diff = (historyDiff $repo $accepted $candidate)
+            printRepoHeading $repo
+            printBranchHeading (repoBranch $repo)
+            printSectionHeading "remote"
+            printCatastrophe $repo $diff
             (input "take origin's history? type yes: " | str trim) == "yes"
+        }
+        def confirmLocalRewrite [repo: string, accepted: string, candidate: string] {
+            let sudoUser = ($env.SUDO_USER? | default "")
+            if not (is-admin) or ($sudoUser | is-empty) or not (is-terminal --stdin) {
+                return false
+            }
+            let diff = (historyDiff $repo $accepted $candidate)
+            printRepoHeading $repo
+            printBranchHeading (repoBranch $repo)
+            printSectionHeading "local"
+            printCatastrophe $repo $diff
+            (input "push local history? type yes: " | str trim) == "yes"
         }
         # fetches origin's <branch> (the one checked out here) into origin/candidate and rebases local work on it
         # (uncommitted changes ride along via --autostash). origin/<branch> moves only when historyDiff keeps the
@@ -484,42 +513,35 @@
         # here, so this host keeps its copy and keeps reporting until someone looks. origin/<branch> is also the
         # lease repoPush checks against, so nothing is pushed on top of a refused history either. --on-rewrite { |accepted, candidate| -> bool } gets to
         # decide instead of refusing (cfg sync passes confirmRewrite); nothing automatic may pass it.
-        # returns { online: bool, changed: bool }; with --pause skips the fetch if FETCH_HEAD is fresh
-        def repoSync [repo: string, --pause, --on-rewrite: closure, --quiet-catastrophe] {
-            checkRepoState $repo
+        # returns the catastrophe record when origin history is not kept; with --pause skips a fresh fetch
+        def repoSync [repo: string, --pause, --on-rewrite: closure] {
+            let gitDir = (checkRepoState $repo)
             let branch = (repoBranch $repo)
-            let gitDir = (gitSafe $repo rev-parse --git-dir | complete | get stdout | str trim)
             let fetchHead = $"($repo)/($gitDir)/FETCH_HEAD"
             if $pause and ($fetchHead | path exists) and (((date now) - (ls -D $fetchHead | get 0 | get modified)) < 3min) {
                 return { online: true, changed: false }
             }
             # fetch fails on network errors, rebase fails on conflicts; separate calls tell the two apart
             # --refmap= stops git from also updating origin/<branch> "opportunistically" through the configured refspec
-            let fetch = (gitSafe $repo fetch --refmap= origin $"+refs/heads/($branch):refs/remotes/origin/candidate" | complete)
-            if $fetch.exit_code != 0 {
-                if (isNetworkError $fetch.stderr) {
-                    return { online: false, changed: false }
-                }
-                if ($fetch.stderr | str contains "couldn't find remote ref") {  # branch made here, not on origin yet; repoPush creates it
-                    return { online: true, changed: false }
-                }
-                error make { msg: $"($repo): fetch failed\n($fetch.stderr)" }
+            let fetch = (fetchCandidate $repo $branch)
+            if not $fetch.online { return { online: false, changed: false, state: "offline" } }
+            if $fetch.state == "missing" {  # branch made here, not on origin yet; repoPush creates it
+                return { online: true, changed: false, state: "origin-missing" }
             }
-            let candidate = (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim)
+            let candidate = $fetch.candidate
             let accepted = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete)  # missing before the first sync of a fresh clone or a new branch
             let accepted = if $accepted.exit_code == 0 { $accepted.stdout | str trim } else { null }
+            let remoteInputs = (remoteFlakeInputs $repo ($accepted | default "") $candidate)
             let diff = if $accepted == null { null } else { historyDiff $repo $accepted $candidate }
             mut rewriteAccepted = false
             if $accepted != null and not $diff.kept {
                 if $on_rewrite != null {
                     if not (do $on_rewrite $accepted $candidate) {
-                        return { online: true, changed: false, state: "catastrophe", direction: "remote", branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate, localFiles: (worktreeFiles $repo) }
+                        return { online: true, changed: false, state: "catastrophe", direction: "remote", branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate, localFiles: (worktreeFiles $repo), remoteInputs: $remoteInputs }
                     }
                     $rewriteAccepted = true
-                } else if $quiet_catastrophe {
-                    return { online: true, changed: false, state: "catastrophe", direction: "remote", branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate, localFiles: (worktreeFiles $repo) }
                 } else {
-                    error make { msg: $"($repo): history on origin was rewritten, local copy kept; compare with origin/candidate, then cfg sync to take it" }
+                    return { online: true, changed: false, state: "catastrophe", direction: "remote", branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate, localFiles: (worktreeFiles $repo), remoteInputs: $remoteInputs }
                 }
             }
             gitSafe $repo update-ref $"refs/remotes/origin/($branch)" $candidate
@@ -551,19 +573,21 @@
                 branch: $branch
                 diff: $diff
                 candidate: $candidate
+                remoteInputs: $remoteInputs
             }
         }
         # pushes HEAD to origin/<branch> with --force-with-lease; on rejection syncs once and retries
         # --report returns a structured result for the branch output
-        def repoPush [repo: string, --no-retry, --report] {
+        def repoPush [repo: string, --no-retry, --report, --on-rewrite: closure] {
             let branch = (repoBranch $repo)
             let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
             let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)  # remote tip (empty for a branch origin lacks); local == remote means nothing to push
             if $local == $remote {
                 return (if $report { { online: true, state: "up-to-date", branch: $branch } } else { true })
             }
-            let diff = if $remote == "" { null } else { historyDiff $repo $remote $local }
-            if $diff != null and not $diff.kept {
+            let pushState = (pushHistoryState $repo $remote $local $on_rewrite)
+            let diff = $pushState.diff
+            if $pushState.catastrophe {
                 if $report {
                     return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $remote, candidate: $local, localFiles: (worktreeFiles $repo) }
                 }
@@ -573,78 +597,74 @@
                 gitSafe $repo --no-pager log -1 --oneline '--format=%C(magenta)%h%C(auto)%d %s'
             }
             let start = (date now)
-            # --force-with-lease overwrites origin/<branch> only if it still matches what we fetched
-            mut res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
-            if $res.exit_code != 0 {
-                if (isNetworkError $res.stderr) {
-                    # offline: keep the commit local, the timer or a later push sends it
-                    print ((ansi yellow) + $repo + ": not pushed (offline), will be pushed later" + (ansi rst))
-                    return (if $report { { online: false, state: "offline", branch: $branch } } else { false })
-                }
+            mut pushed = (pushCandidate $repo $branch "HEAD" $remote)
+            if $pushed.state == "offline" {
+                return (if $report { { online: false, state: "offline", branch: $branch } } else { false })
+            }
+            if $pushed.state == "rejected" {
                 if $no_retry {
-                    error make { msg: $"($repo): push rejected\n($res.stderr)" }
+                    error make { msg: $"($repo): push rejected\n($pushed.stderr)" }
                 }
                 # remote moved between our fetch and push: sync again and retry once
-                repoSync $repo
+                let sync = (repoSync $repo --on-rewrite=$on_rewrite)
+                if $sync.state? == "catastrophe" {
+                    if $report { return $sync }
+                    error make { msg: $"($repo): history on origin was rewritten, local copy kept" }
+                }
                 let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
                 let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
-                let diff = if $remote == "" { null } else { historyDiff $repo $remote $local }
-                if $diff != null and not $diff.kept {
+                let pushState = (pushHistoryState $repo $remote $local $on_rewrite)
+                let diff = $pushState.diff
+                if $pushState.catastrophe {
                     if $report {
                         return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $remote, candidate: $local, localFiles: (worktreeFiles $repo) }
                     }
                     error make { msg: $"($repo): ($branch): local branch changed or dropped commits that are on origin, not pushed" }
                 }
-                $res = (gitSafe $repo push --force-with-lease origin $"HEAD:($branch)" | complete)
-                if $res.exit_code != 0 {
-                    if (isNetworkError $res.stderr) {
-                        print ((ansi yellow) + $repo + ": not pushed (offline), will be pushed later" + (ansi rst))
-                        return (if $report { { online: false, state: "offline", branch: $branch } } else { false })
-                    }
-                    error make { msg: $"($repo): push failed\n($res.stderr)" }
+                $pushed = (pushCandidate $repo $branch "HEAD" $remote)
+                if $pushed.state == "offline" {
+                    return (if $report { { online: false, state: "offline", branch: $branch } } else { false })
+                }
+                if $pushed.state == "rejected" {
+                    error make { msg: $"($repo): push failed\n($pushed.stderr)" }
                 }
             }
             if not $report {
-                print $"(ansi green_bold)Successful push in ((date now) - $start)(ansi rst)"
+                print $"($REPORT_COLOR.greenBold)Successful push in ((date now) - $start)($REPORT_COLOR.reset)"
             }
             if $report { { online: true, state: "pushed", branch: $branch } } else { true }
         }
         # syncs one local branch without checking it out
-        def repoSyncBranch [repo: string, branch: string, action: string, --on-rewrite: closure] {
+        def repoSyncBranch [repo: string, branch: string, action: string, --on-rewrite: closure, --on-local-rewrite: closure] {
             checkRepoState $repo
             let local = (gitSafe $repo rev-parse $"refs/heads/($branch)" | complete | get stdout | str trim)
             let acceptedResult = (gitSafe $repo rev-parse -q --verify $"refs/remotes/origin/($branch)" | complete)
             let accepted = if $acceptedResult.exit_code == 0 { $acceptedResult.stdout | str trim } else { null }
-            let fetch = (gitSafe $repo fetch --refmap= origin $"+refs/heads/($branch):refs/remotes/origin/candidate" | complete)
-            if $fetch.exit_code != 0 {
-                if (isNetworkError $fetch.stderr) {
-                    return { online: false, state: "offline", branch: $branch }
-                }
-                if ($fetch.stderr | str contains "couldn't find remote ref") {
+            let fetch = (fetchCandidate $repo $branch)
+            if not $fetch.online {
+                return { online: false, state: "offline", branch: $branch }
+            }
+            if $fetch.state == "missing" {
                     if $action == "pull" {
                         return { online: true, state: "origin-missing", branch: $branch }
                     }
-                    let lease = $"--force-with-lease=refs/heads/($branch):"
-                    let pushed = (gitSafe $repo push $lease origin $"refs/heads/($branch):refs/heads/($branch)" | complete)
-                    if $pushed.exit_code != 0 {
-                        if (isNetworkError $pushed.stderr) {
-                            return { online: false, state: "offline", branch: $branch }
-                        }
+                    let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" "")
+                    if $pushed.state == "offline" { return { online: false, state: "offline", branch: $branch } }
+                    if $pushed.state != "pushed" {
                         error make { msg: $"($repo): push of new branch ($branch) failed\n($pushed.stderr)" }
                     }
                     updateRemoteBranchRef $repo $branch $local
                     return { online: true, state: "pushed", branch: $branch, pushed: (commitsToPush $repo "" $local) }
                 }
-                error make { msg: $"($repo): fetch of branch ($branch) failed\n($fetch.stderr)" }
-            }
-            let candidate = (gitSafe $repo rev-parse origin/candidate | complete | get stdout | str trim)
+            let candidate = $fetch.candidate
             let base = if $accepted == null { $candidate } else { $accepted }
+            let remoteInputs = (remoteFlakeInputs $repo ($accepted | default "") $candidate)
             if $local == $base {
                 let diff = (historyDiff $repo $base $candidate)
                 mut rewriteAccepted = false
                 if not $diff.kept {
                     if $on_rewrite == null or not (do $on_rewrite $base $candidate) {
-                        return { online: true, state: "catastrophe", direction: "remote", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+                        return { online: true, state: "catastrophe", direction: "remote", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
                     }
                     $rewriteAccepted = true
                 }
@@ -652,29 +672,66 @@
                     gitSafe $repo update-ref $"refs/heads/($branch)" $candidate $local
                 }
                 updateRemoteBranchRef $repo $branch $candidate
-                return { online: true, state: (if $rewriteAccepted { "rewritten" } else if $local == $candidate { "up-to-date" } else { "updated" }), branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+                return { online: true, state: (if $rewriteAccepted { "rewritten" } else if $local == $candidate { "up-to-date" } else { "updated" }), branch: $branch, diff: $diff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
             }
             if $candidate == $base {
                 let diff = (historyDiff $repo $base $local)
                 if not $diff.kept {
-                    return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $base, candidate: $local }
+                    if $action == "sync" and $on_local_rewrite != null and (do $on_local_rewrite $base $local) {
+                        let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $base)
+                        if $pushed.state == "offline" { return { online: false, state: "offline", branch: $branch } }
+                        if $pushed.state != "pushed" {
+                            error make { msg: $"($repo): push of rewritten branch ($branch) failed\n($pushed.stderr)" }
+                        }
+                        updateRemoteBranchRef $repo $branch $local
+                        return { online: true, state: "pushed", branch: $branch, diff: $diff, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local) }
+                    }
+                    return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $base, candidate: $local, remoteInputs: $remoteInputs }
                 }
                 if $action == "pull" {
                     if $accepted == null { updateRemoteBranchRef $repo $branch $candidate }
-                    return { online: true, state: "local-ahead", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
+                    return { online: true, state: "local-ahead", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
                 }
-                let lease = $"--force-with-lease=refs/heads/($branch):($base)"
-                let pushed = (gitSafe $repo push $lease origin $"refs/heads/($branch):refs/heads/($branch)" | complete)
-                if $pushed.exit_code != 0 {
-                    if (isNetworkError $pushed.stderr) {
-                        return { online: false, state: "offline", branch: $branch }
-                    }
+                let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $base)
+                if $pushed.state == "offline" { return { online: false, state: "offline", branch: $branch } }
+                if $pushed.state != "pushed" {
                     error make { msg: $"($repo): push of branch ($branch) failed\n($pushed.stderr)" }
                 }
                 updateRemoteBranchRef $repo $branch $local
-                return { online: true, state: "pushed", branch: $branch, diff: null, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local) }
+                return { online: true, state: "pushed", branch: $branch, diff: null, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local), remoteInputs: $remoteInputs }
             }
-            { online: true, state: "both-moved", branch: $branch, local: $local, candidate: $candidate }
+            let remoteDiff = (historyDiff $repo $base $candidate)
+            let localDiff = (historyDiff $repo $base $local)
+            if not $remoteDiff.kept {
+                if $on_rewrite == null or not (do $on_rewrite $base $candidate) {
+                    return { online: true, state: "catastrophe", direction: "remote", branch: $branch, diff: $remoteDiff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
+                }
+            }
+            if not $localDiff.kept {
+                return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $localDiff, accepted: $base, candidate: $local, remoteInputs: $remoteInputs }
+            }
+            let replay = (gitSafe $repo replay --onto $candidate $"($base)..refs/heads/($branch)" --ref-action=print | complete)
+            if $replay.exit_code != 0 {
+                let conflicts = (gitSafe $repo diff --name-only --diff-filter=U | complete | get stdout | lines)
+                return { online: true, state: "conflict", branch: $branch, conflictFiles: $conflicts }
+            }
+            if not ($replay.stdout | str trim | is-empty) {
+                $replay.stdout | gitSafe $repo update-ref --stdin
+            }
+            updateRemoteBranchRef $repo $branch $candidate
+            let replayed = (gitSafe $repo rev-parse $"refs/heads/($branch)" | complete | get stdout | str trim)
+            if $action in [ "push" "sync" ] and $replayed != $candidate {
+                let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $candidate)
+                if $pushed.state == "offline" {
+                    return { online: false, state: "offline", branch: $branch, diff: $remoteDiff, pushed: (commitsToPush $repo $candidate $replayed) }
+                }
+                if $pushed.state != "pushed" {
+                    error make { msg: $"($repo): push of replayed branch ($branch) failed\n($pushed.stderr)" }
+                }
+                updateRemoteBranchRef $repo $branch $replayed
+                return { online: true, state: "pushed", branch: $branch, diff: $remoteDiff, accepted: $base, candidate: $replayed, pushed: (commitsToPush $repo $candidate $replayed) }
+            }
+            { online: true, state: "updated", branch: $branch, diff: $remoteDiff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
         }
         # revision of the common input recorded in the repo's flake.lock (null if absent)
         def lockedRev [repo: string] {
@@ -689,24 +746,195 @@
             cd $repo
             let res = (^/run/current-system/sw/bin/nix flake update --refresh common | complete)
             if $res.exit_code != 0 {
-                print $"($res.stdout)\n(ansi red)($res.stderr)(ansi rst)"
+                    print $"($res.stdout)\n($REPORT_COLOR.red)($res.stderr)($REPORT_COLOR.reset)"
                 error make { msg: $"($repo): nix flake update common failed" }
             }
         }
         # commits selected worktree changes and returns their report rows
-        # direct inputs of the working tree's flake.lock that HEAD's flake.lock does not have
-        def newFlakeInputs [repo: string] {
-            let inputs = { |lock|
-                try {
-                    let nodes = ($lock | from json)
-                    $nodes.nodes | get $nodes.root | get inputs | columns
-                } catch { [] }
+        def inputSource [original: record] {
+            let url = ($original.url? | default "")
+            let type = ($original.type? | default "")
+            if not ($url | is-empty) { return $url }
+            if $type == "github" {
+                let ref = ($original.ref? | default "")
+                let source = $"github:($original.owner? | default "?")/($original.repo? | default "?")"
+                return (if ($ref | is-empty) { $source } else { $"($source)?ref=($ref)" })
             }
-            let before = (do $inputs (gitSafe $repo show HEAD:flake.lock | complete | get stdout))
-            let now = (do $inputs (try { open --raw $"($repo)/flake.lock" } catch { "" }))
-            $now | where { |i| $i not-in $before }
+            let id = ($original.id? | default "")
+            if not ($id | is-empty) { $"($type):($id)" } else { $type }
         }
-        def worktreeFiles [repo: string] {
+        def resolveFollow [nodes: record, root: string, segments: list<string>] {
+            mut current = $root
+            for segment in $segments {
+                let node = ($nodes | get --optional $current)
+                if $node == null { return null }
+                let input = (($node.inputs? | default {}) | get --optional $segment)
+                if $input == null { return null }
+                if ($input | describe | str starts-with "list") {
+                    $current = (resolveFollow $nodes $root $input)
+                } else {
+                    $current = $input
+                }
+            }
+            $current
+        }
+        def walkLockInput [nodes: record, root: string, input: any, path: string, ancestors: list<string>] {
+            if ($input | describe | str starts-with "list") {
+                let follows = ($input | str join "/")
+                let target = (resolveFollow $nodes $root $input)
+                if $target == null {
+                    return [{
+                        path: $path
+                        follows: $follows
+                        original: ""
+                        rev: ""
+                        lastModified: null
+                        date: ""
+                        narHash: ""
+                    }]
+                }
+                walkLockNode $nodes $root $target $path $follows $ancestors
+            } else {
+                walkLockNode $nodes $root $input $path "" $ancestors
+            }
+        }
+        def walkLockNode [nodes: record, root: string, nodeId: string, path: string, follows: string, ancestors: list<string>] {
+            let node = ($nodes | get --optional $nodeId)
+            if $node == null {
+                return [{
+                    path: $path
+                    follows: $follows
+                    original: ""
+                    rev: ""
+                    lastModified: null
+                    date: ""
+                    narHash: ""
+                }]
+            }
+            let locked = ($node.locked? | default {})
+            let lastModified = ($locked.lastModified? | default null)
+            let date = if $lastModified == null { "" } else {
+                try { $lastModified * 1_000_000_000 | into datetime | format date '%Y-%m-%d %H:%M:%S' } catch { "" }
+            }
+            let entry = {
+                path: $path
+                follows: $follows
+                original: (inputSource ($node.original? | default {}))
+                rev: ($locked.rev? | default "")
+                lastModified: $lastModified
+                date: $date
+                narHash: ($locked.narHash? | default "")
+            }
+            mut result = [ $entry ]
+            let nextAncestors = ($ancestors | append $nodeId)
+            if $nodeId not-in $ancestors {
+                let inputs = ($node.inputs? | default {})
+                for name in ($inputs | columns) {
+                    let childPath = $"($path)/($name)"
+                    $result = ($result ++ (walkLockInput $nodes $root ($inputs | get $name) $childPath $nextAncestors))
+                }
+            }
+            $result
+        }
+        def flakeLockInputs [text: string] {
+            try {
+                let lock = ($text | from json)
+                let nodes = $lock.nodes
+                let root = $lock.root
+                let rootInputs = (($nodes | get $root).inputs? | default {})
+                mut result = []
+                for name in ($rootInputs | columns) {
+                    $result = ($result ++ (walkLockInput $nodes $root ($rootInputs | get $name) $name [ $root ]))
+                }
+                $result | sort-by path
+            } catch { [] }
+        }
+        def compareFlakeInputs [before: list<record>, after: list<record>] {
+            let beforePaths = ($before | get path)
+            let afterPaths = ($after | get path)
+            mut changes = []
+            for current in $after {
+                if $current.path not-in $beforePaths {
+                    $changes = ($changes | append { kind: "added", item: $current })
+                    continue
+                }
+                let old = ($before | where { |entry| $entry.path == $current.path } | first)
+                let kind = if ($old.original != $current.original) or ($old.follows != $current.follows) {
+                    "source"
+                } else if ($old.rev == $current.rev) and ($old.narHash != $current.narHash) {
+                    "narHash"
+                } else if $old.rev != $current.rev {
+                    if ($old.lastModified != null) and ($current.lastModified != null) and ($current.lastModified < $old.lastModified) { "downgrade" } else { "updated" }
+                } else {
+                    ""
+                }
+                if not ($kind | is-empty) {
+                    $changes = ($changes | append { kind: $kind, old: $old, item: $current })
+                }
+            }
+            for old in $before {
+                if $old.path not-in $afterPaths {
+                    $changes = ($changes | append { kind: "removed", item: $old })
+                }
+            }
+            $changes | sort-by { |change| $change.item.path }
+        }
+        def lockText [repo: string, source: string] {
+            if $source == "worktree" {
+                try { open --raw $"($repo)/flake.lock" } catch { "" }
+            } else if $source == "index" {
+                let result = (gitSafe $repo show :flake.lock | complete)
+                if $result.exit_code == 0 { $result.stdout } else { "" }
+            } else {
+                let result = (gitSafe $repo show $"($source):flake.lock" | complete)
+                if $result.exit_code == 0 { $result.stdout } else { "" }
+            }
+        }
+        def localFlakeInputs [repo: string, source: string] {
+            compareFlakeInputs (flakeLockInputs (lockText $repo "HEAD")) (flakeLockInputs (lockText $repo $source))
+        }
+        def remoteFlakeInputs [repo: string, accepted: string, candidate: string] {
+            let before = if ($accepted | is-empty) { [] } else { flakeLockInputs (lockText $repo $accepted) }
+            compareFlakeInputs $before (flakeLockInputs (lockText $repo $candidate))
+        }
+        def printInputChanges [repo: string, changes: list<record>, --quiet] {
+            if ($changes | is-empty) { return }
+            print $"($REPORT_INDENT.item)($REPORT_COLOR.section)inputs($REPORT_COLOR.reset)"
+            for change in $changes {
+                let path = $change.item.path
+                let indent = $REPORT_INDENT.detail
+                if $change.kind == "added" {
+                    let item = $change.item
+                    let rev = if ($item.rev | is-empty) { "" } else { $item.rev | str substring 0..7 }
+                    print $"($indent)($REPORT_COLOR.greenBold)A  ($path)  ($item.original)  ($rev)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($item.date)($REPORT_COLOR.reset)"
+                    if not ($item.follows | is-empty) {
+                        print $"($REPORT_INDENT.detail)   follows: ($item.follows)"
+                    }
+                } else if $change.kind == "removed" {
+                    print $"($indent)($REPORT_COLOR.redBold)D  ($path)($REPORT_COLOR.reset)"
+                } else if $change.kind == "updated" or $change.kind == "downgrade" {
+                    let oldRev = if ($change.old.rev | is-empty) { "" } else { $change.old.rev | str substring 0..7 }
+                    let newRev = if ($change.item.rev | is-empty) { "" } else { $change.item.rev | str substring 0..7 }
+                    let color = if $change.kind == "updated" { $REPORT_COLOR.yellow } else { $REPORT_COLOR.magentaBold }
+                    let mark = if $change.kind == "updated" { "M" } else { "v" }
+                    print $"($indent)($color)($mark)  ($path)  ($oldRev) -> ($newRev)  ($REPORT_COLOR.darkGray)($change.old.date) -> ($change.item.date)($REPORT_COLOR.reset)"
+                } else if $change.kind == "source" {
+                    let color = (sourceChangeColor)
+                    let oldSource = if $change.old.follows != $change.item.follows {
+                        $"follows: (if ($change.old.follows | is-empty) { "none" } else { $change.old.follows })"
+                    } else { $change.old.original }
+                    let newSource = if $change.old.follows != $change.item.follows {
+                        (if ($change.item.follows | is-empty) { "none" } else { $change.item.follows })
+                    } else { $change.item.original }
+                    print $"($indent)($color)S  ($path)  ($oldSource) -> ($newSource)($REPORT_COLOR.reset)"
+                } else if $change.kind == "narHash" {
+                    let message = $"($path): narHash changed for the same rev"
+                    print $"($indent)($REPORT_COLOR.redBold)!  ($message)($REPORT_COLOR.reset)"
+                    reportProblem $repo $message --quiet=$quiet
+                }
+            }
+        }
+        def worktreeFiles [repo: string, --unstaged-only] {
             let entries = (gitSafe $repo status --porcelain=v1 -z | complete | get stdout | split row (char nul) | where { |entry| $entry != "" })
             mut files = []
             mut i = 0
@@ -714,22 +942,11 @@
                 if $i >= ($entries | length) { break }
                 let line = ($entries | get $i)
                 let status = ($line | str substring 0..1)
-                let letter = if $status == "??" { "?" } else if ($status | str contains "A") {
-                    "A"
-                } else if ($status | str contains "M") {
-                    "M"
-                } else if ($status | str contains "D") {
-                    "D"
-                } else if ($status | str contains "R") {
-                    "R"
-                } else if ($status | str contains "C") {
-                    "C"
-                } else if ($status | str contains "T") {
-                    "T"
-                } else if ($status | str contains "U") {
-                    "U"
-                } else {
-                    "?"
+                let marks = { A: "A", M: "M", D: "D", R: "R", C: "C", T: "T", U: "U" }
+                let indexStatus = ($status | str substring 0..0)
+                let worktreeStatus = ($status | str substring 1..1)
+                let letter = if $status == "??" { "?" } else {
+            ($marks | get --optional $indexStatus | default ($marks | get --optional $worktreeStatus | default "?"))
                 }
                 let path = ($line | str substring 3..)
                 let oldPath = if $letter in [ "R" "C" ] {
@@ -741,29 +958,27 @@
                 let date = if ($fullPath | path exists) {
                     try { ls -D $fullPath | get 0 | get modified | format date '%Y-%m-%d %H:%M:%S' } catch { "?" }
                 } else { "?" }
-                $files = ($files | append { letter: $letter, path: $displayPath, date: $date })
+                let unstaged = ($status == "??") or (($status | str substring 1..1) != " ")
+                if not $unstaged_only or $unstaged {
+                    $files = ($files | append { letter: $letter, path: $displayPath, date: $date })
+                }
                 $i = $i + 1
             }
             $files
         }
-        def commitRepo [repo: string, message: string, --tracked] {
-            cd $repo
-            # a new input is the quiet way for unknown code to enter the system: name it loudly before it is committed
-            let newInputs = (newFlakeInputs $repo)
-            if not ($newInputs | is-empty) {
-                print -e $"(ansi red_bold)($repo): new flake inputs: ($newInputs | str join ' ')(ansi rst)"
-            }
-            if $tracked { gitSafe $repo add -u } else { gitSafe $repo add . }
-            let files = (worktreeFiles $repo)
+        def commitRepo [repo: string, message: string, --no-add] {
+            if not $no_add { gitSafe $repo add . }
+            let files = if $no_add { worktreeFiles $repo --unstaged-only } else { worktreeFiles $repo }
+            let inputs = (localFlakeInputs $repo "index")
             let staged = (gitSafe $repo diff --cached --name-only | complete | get stdout)
             let committed = not ($staged | is-empty)
             if $committed {
                 silent { gitSafe $repo commit -m $message }
             }
-            { files: $files, committed: $committed }
+            { files: $files, committed: $committed, inputs: $inputs }
         }
-        def commitAndPush [repo: string, message: string, remoteDiff?: record, --tracked] {
-            let changes = (commitRepo $repo $message --tracked=$tracked)
+        def commitAndPush [repo: string, message: string, remoteDiff?: record, remoteInputs?: list<record>, --no-add] {
+            let changes = (commitRepo $repo $message --no-add=$no_add)
             let branch = (repoBranch $repo)
             let remote = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete | get stdout | str trim)
             let local = (gitSafe $repo rev-parse HEAD | complete | get stdout | str trim)
@@ -775,9 +990,7 @@
                 return (printBranchResult $repo $branch $result)
             }
             let pending = if $pushed.state == "pushed" or $pushed.state == "offline" { $commits } else { [] }
-            let state = if $remoteDiff == null {
-                if $pushed.state == "offline" { "local-ahead" } else { $pushed.state }
-            } else if not $remoteDiff.kept {
+            let state = if ($remoteDiff != null) and not $remoteDiff.kept {
                 "rewritten"
             } else if $pushed.state == "offline" {
                 "local-ahead"
@@ -789,6 +1002,8 @@
                 branch: $branch
                 diff: $remoteDiff
                 localFiles: $changes.files
+                localInputs: $changes.inputs
+                remoteInputs: ($remoteInputs | default [])
                 pushed: $pending
             }
             if (branchHasReport $result) { printRepoHeading $repo }
