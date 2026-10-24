@@ -42,9 +42,9 @@ rec {
         def --wrapped gitSafe [repo: string, ...args: string] {
             ^${pkgs.git}/bin/git -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=${pkgs.openssh}/bin/ssh -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
         }
-        # always prints the error in red; with --quiet (service) also logs to the journal and notifies the first user
+        # manual errors print in red; quiet errors go to the journal and notify the first user
         def reportProblem [repo: string, text: string, --quiet] {
-            print -e $"(ansi red)($repo): ($text)(ansi rst)"
+            if not $quiet { print -e $"(ansi red)($repo): ($text)(ansi rst)" }
             if $quiet {
                 ^${pkgs.util-linux}/bin/logger -t nixos-config $"($repo): ($text)"
                 try {

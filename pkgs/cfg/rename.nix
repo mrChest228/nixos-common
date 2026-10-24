@@ -133,7 +133,7 @@
                         if (lockedRev $repo) == $oldCommonRev {
                             updateCommonLock $repo
                             # target's new lock goes into its amend below; other repos get their own commit
-                            if $repo != $target { commitAndPush $repo $"${vars.host}: Common flake has been updated" } else { $targetRelocked = true }
+                            if $repo != $target { commitAndPush $repo $"${vars.host}: Common flake has been updated" | ignore } else { $targetRelocked = true }
                         }
                     }
                 }
