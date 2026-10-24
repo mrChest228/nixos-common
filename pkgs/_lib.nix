@@ -89,12 +89,13 @@ rec {
     # nuBase plus what only the switching commands (update, rebuild, reconf) need.
     nuSwitch = ''
         ${nuBase}
-        def commitIfChanged [prefix: string, message?: string] {
+        def commitIfChanged [prefix: string, message?: string, --tracked] {
             # status --porcelain is empty only when the worktree is clean
             let dirty = (not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty))
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
-                try { ^${pkgs.cfg}/bin/cfg commit $msg }
+                let trackedArgs = if $tracked { [ "--tracked" ] } else { [] }
+                try { ^${pkgs.cfg}/bin/cfg commit $msg ...$trackedArgs }
             }
         }
         # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates

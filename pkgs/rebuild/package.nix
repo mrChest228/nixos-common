@@ -1,7 +1,7 @@
 # rebuild — commits pending config changes and switches to the current NixOS configuration
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
 # Installed and wired (sudo rule) by sys/config/rebuild.nix; calls cfg commit/perms and gen clean.
-# Usage: rebuild [message?]
+# Usage: rebuild [message?] [--tracked (-t)]
 # Examples:
 #   rebuild
 #   rebuild "niri: blur"
@@ -10,9 +10,9 @@ let
     scripts = import ../_lib.nix { inherit lib pkgs vars com; };
 in (scripts.mkRootFlockCommand "rebuild" ''
         ${scripts.nuSwitch}
-        def main [message?: string] {
+        def main [message?: string, --tracked(-t)] {
             checkNoForeign
-            commitIfChanged "Rebuild" $message
+            commitIfChanged "Rebuild" $message --tracked=$tracked
             let bootedGen = ((^${pkgs.coreutils}/bin/readlink -f /run/current-system | complete).stdout | str trim)
             let lstGen = ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             ^${pkgs.nh}/bin/nh os switch -R -H ${vars.host} ${vars.configPath}/cur
