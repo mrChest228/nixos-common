@@ -18,7 +18,7 @@
             if $result.exit_code == 0 {
                 { online: true, state: "pushed" }
             } else if (isNetworkError $result.stderr) {
-                print ($REPORT_COLOR.yellow + $repo + ": not pushed (offline), will be pushed later" + $REPORT_COLOR.reset)
+                print ($REPORT_COLOR.redBold + $repo + ": not pushed (offline), will be pushed later" + $REPORT_COLOR.reset)
                 { online: false, state: "offline" }
             } else {
                 { online: true, state: "rejected", stderr: $result.stderr }
@@ -50,10 +50,10 @@
                     $ok = false
                 } else if not $result.online {
                     if $command == "sync" {
-                        print $"($REPORT_COLOR.yellow)($repo)/($branch): offline, sync skipped($REPORT_COLOR.reset)"
+                        print $"($REPORT_COLOR.redBold)($repo)/($branch): offline, sync skipped($REPORT_COLOR.reset)"
                         $ok = false
                     } else if not $quiet {
-                        print $"($REPORT_COLOR.yellow)($repo): offline, ($command) skipped($REPORT_COLOR.reset)"
+                        print $"($REPORT_COLOR.redBold)($repo): offline, ($command) skipped($REPORT_COLOR.reset)"
                     }
                     break
                 } else if $result.state == "catastrophe" {

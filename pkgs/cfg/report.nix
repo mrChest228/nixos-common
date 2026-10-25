@@ -1,7 +1,7 @@
 { pkgs, vars }:
 ''
         const REPORT_INDENT = { branch: "   ", section: "      ", item: "         ", detail: "            " }
-        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), darkGray: (ansi --escape '90m') }
+        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }
         def unicodeOutput [] {
             let term = ($env.TERM? | default "")
             let locales = [ ($env.LC_ALL? | default "") ($env.LC_CTYPE? | default "") ($env.LANG? | default "") ]
@@ -15,10 +15,10 @@
         }
         def changeMark [letter: string] {
             match $letter {
-                "" => { text: " ", color: $REPORT_COLOR.yellow }
+                "" => { text: " ", color: $REPORT_COLOR.yellowBright }
                 "A" => { text: "+", color: $REPORT_COLOR.green }
                 "D" => { text: "-", color: $REPORT_COLOR.red }
-                "M" => { text: "~", color: $REPORT_COLOR.yellow }
+                "M" => { text: "~", color: $REPORT_COLOR.yellowBright }
                 "R" => { text: ">", color: $REPORT_COLOR.cyan }
                 "C" => { text: "=", color: $REPORT_COLOR.magenta }
                 "T" => { text: "T", color: $REPORT_COLOR.blue }
@@ -86,7 +86,7 @@
             let mark = (changeMark $letter)
             let oldHash = ($event.oldHash | str substring 0..7)
             let newHash = ($event.newHash | str substring 0..7)
-            print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject) -> ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
+            print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject) ($REPORT_COLOR.white)->($REPORT_COLOR.reset) ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
             printInputChanges (commitFlakeInputs $repo $event.newHash).changes $REPORT_INDENT.detail
         }
         def printRemoteDiff [repo: string, diff: record] {
@@ -136,7 +136,7 @@
                 let previous = (open --raw $marker | str trim)
                 if $previous == $result.candidate {
                     let short = (gitOut $repo rev-parse --short $result.candidate)
-                    let unresolved = ("CATASTROPHE still unresolved (origin " + $short + ")")
+                    let unresolved = ("CATASTROPHE still unresolved (origin " + $short + "), branch skipped")
                     print -e ($REPORT_INDENT.section + $REPORT_COLOR.redBold + $unresolved + $REPORT_COLOR.reset)
                     return
                 }
@@ -190,14 +190,14 @@
             }
             if $result.state == "both-moved" {
                 printBranchHeading $branch
-                print $"($REPORT_INDENT.section)($REPORT_COLOR.yellow)(glyph "→" ">") both local and origin have new commits, switch to it to sync($REPORT_COLOR.reset)"
+                print $"($REPORT_INDENT.section)($REPORT_COLOR.redBold)both local and origin have new commits, switch to it to sync, branch skipped($REPORT_COLOR.reset)"
                 return true
             }
             if $result.state == "conflict" {
                 printBranchHeading $branch
                 let files = $result.conflictFiles? | default []
-                let suffix = if ($files | is-empty) { "" } else { ": " + ($files | str join ", ") }
-                print $"($REPORT_INDENT.section)($REPORT_COLOR.yellow)conflict, branch skipped($suffix)($REPORT_COLOR.reset)"
+                let where = if ($files | is-empty) { "" } else { " in " + ($files | str join ", ") }
+                print $"($REPORT_INDENT.section)($REPORT_COLOR.redBold)merge conflict($where), branch skipped($REPORT_COLOR.reset)"
                 return true
             }
             let diff = $result.diff?
