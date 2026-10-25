@@ -92,43 +92,37 @@
             }
             $changes | sort-by { |change| $change.item.path }
         }
-        def lockText [repo: string, source: string] {
-            if $source == "worktree" {
-                try { open --raw $"($repo)/flake.lock" } catch { "" }
-            } else if $source == "index" {
-                let result = (gitSafe $repo show :flake.lock | complete)
-                if $result.exit_code == 0 { $result.stdout } else { "" }
-            } else {
-                let result = (gitSafe $repo show $"($source):flake.lock" | complete)
-                if $result.exit_code == 0 { $result.stdout } else { "" }
-            }
+        def lockText [repo: string, commit: string] {
+            let result = (gitSafe $repo show $"($commit):flake.lock" | complete)
+            if $result.exit_code == 0 { $result.stdout } else { "" }
         }
-        def localFlakeInputs [repo: string, source: string] {
-            compareFlakeInputs (flakeLockInputs (lockText $repo "HEAD")) (flakeLockInputs (lockText $repo $source))
+        def commitFlakeInputs [repo: string, hash: string] {
+            let parent = (gitSafe $repo rev-parse -q --verify $"($hash)^" | complete)
+            let beforeText = if $parent.exit_code == 0 { lockText $repo ($parent.stdout | str trim) } else { "" }
+            let afterText = (lockText $repo $hash)
+            let before = (flakeLockInputs $beforeText)
+            let after = (flakeLockInputs $afterText)
+            { touched: ($beforeText != $afterText), changes: (compareFlakeInputs $before $after) }
         }
-        def remoteFlakeInputs [repo: string, accepted: string, candidate: string] {
-            let before = if ($accepted | is-empty) { [] } else { flakeLockInputs (lockText $repo $accepted) }
-            compareFlakeInputs $before (flakeLockInputs (lockText $repo $candidate))
-        }
-        def printInputChanges [repo: string, changes: list<record>, --quiet] {
-            if ($changes | is-empty) { return }
-            print $"($REPORT_INDENT.item)($REPORT_COLOR.section)inputs($REPORT_COLOR.reset)"
+        def printInputChanges [repo: string, changes: list<record>, indent: string, --quiet] {
+            let changeIndent = ($indent + "   ")
+            let followIndent = ($changeIndent + "   ")
+            print $"($indent)($REPORT_COLOR.section)inputs($REPORT_COLOR.reset)"
             for change in $changes {
                 let path = $change.item.path
-                let indent = $REPORT_INDENT.detail
                 if $change.kind == "added" {
                     let item = $change.item
                     let rev = if ($item.rev | is-empty) { "" } else { $item.rev | str substring 0..7 }
-                    print $"($indent)($REPORT_COLOR.greenBold)A  ($path)  ($item.original)  ($rev)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($item.date)($REPORT_COLOR.reset)"
-                    if not ($item.follows | is-empty) { print $"($REPORT_INDENT.detail)   follows: ($item.follows)" }
+                    print $"($changeIndent)($REPORT_COLOR.greenBold)A  ($path)  ($item.original)  ($rev)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($item.date)($REPORT_COLOR.reset)"
+                    if not ($item.follows | is-empty) { print $"($followIndent)follows: ($item.follows)" }
                 } else if $change.kind == "removed" {
-                    print $"($indent)($REPORT_COLOR.redBold)D  ($path)($REPORT_COLOR.reset)"
+                    print $"($changeIndent)($REPORT_COLOR.redBold)D  ($path)($REPORT_COLOR.reset)"
                 } else if $change.kind == "updated" or $change.kind == "downgrade" {
                     let oldRev = if ($change.old.rev | is-empty) { "" } else { $change.old.rev | str substring 0..7 }
                     let newRev = if ($change.item.rev | is-empty) { "" } else { $change.item.rev | str substring 0..7 }
                     let color = if $change.kind == "updated" { $REPORT_COLOR.yellow } else { $REPORT_COLOR.magentaBold }
                     let mark = if $change.kind == "updated" { "M" } else { "v" }
-                    print $"($indent)($color)($mark)  ($path)  ($oldRev) -> ($newRev)  ($REPORT_COLOR.darkGray)($change.old.date) -> ($change.item.date)($REPORT_COLOR.reset)"
+                    print $"($changeIndent)($color)($mark)  ($path)  ($oldRev) -> ($newRev)  ($REPORT_COLOR.darkGray)($change.old.date) -> ($change.item.date)($REPORT_COLOR.reset)"
                 } else if $change.kind == "source" {
                     let color = $REPORT_COLOR.yellowBold
                     let oldSource = if $change.old.follows != $change.item.follows {
@@ -137,10 +131,10 @@
                     let newSource = if $change.old.follows != $change.item.follows {
                         (if ($change.item.follows | is-empty) { "none" } else { $change.item.follows })
                     } else { $change.item.original }
-                    print $"($indent)($color)S  ($path)  ($oldSource) -> ($newSource)($REPORT_COLOR.reset)"
+                    print $"($changeIndent)($color)S  ($path)  ($oldSource) -> ($newSource)($REPORT_COLOR.reset)"
                 } else if $change.kind == "narHash" {
                     let message = $"($path): narHash changed for the same rev"
-                    print $"($indent)($REPORT_COLOR.redBold)!  ($message)($REPORT_COLOR.reset)"
+                    print $"($changeIndent)($REPORT_COLOR.redBold)!  ($message)($REPORT_COLOR.reset)"
                     if $quiet { reportProblem $repo $message --quiet }
                 }
             }

@@ -61,53 +61,51 @@
                 printFileLine $REPORT_INDENT.detail $letter $path ""
             }
         }
-        def printHistoryCommit [repo: string, letter: string, commit: record] {
+        def printHistoryCommit [repo: string, letter: string, commit: record, --quiet] {
             let mark = (changeMark $letter)
             let hash = ($commit.hash | str substring 0..7)
             print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($hash)($REPORT_COLOR.reset) ($mark.color)($commit.subject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($commit.date)($REPORT_COLOR.reset)"
             printCommitFiles $repo $commit.hash
+            let inputs = (commitFlakeInputs $repo $commit.hash)
+            if $inputs.touched { printInputChanges $repo $inputs.changes $REPORT_INDENT.detail --quiet=$quiet }
         }
-        def printRewrittenCommit [letter: string, event: record] {
+        def printRewrittenCommit [repo: string, letter: string, event: record, --quiet] {
+            let mark = (changeMark $letter)
             let oldHash = ($event.oldHash | str substring 0..7)
             let newHash = ($event.newHash | str substring 0..7)
-            if $letter == "R" {
-                let mark = (changeMark $letter)
-                print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject) -> ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
-            } else {
-                print $"($REPORT_INDENT.item)   ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($event.oldSubject) -> ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($event.newSubject)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
-            }
+            print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject) -> ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
+            let inputs = (commitFlakeInputs $repo $event.newHash)
+            if $inputs.touched { printInputChanges $repo $inputs.changes $REPORT_INDENT.detail --quiet=$quiet }
         }
-        def printRemoteDiff [repo: string, diff: record, inputs: list<record>, --quiet] {
+        def printRemoteDiff [repo: string, diff: record, --quiet] {
             let events = ($diff.events? | default [])
-            if ($events | is-empty) and ($inputs | is-empty) { return }
+            if ($events | is-empty) { return }
             printSectionHeading "remote"
             for event in $events {
                 if $event.kind == "added" {
-                    printHistoryCommit $repo "A" $event.commit
+                    printHistoryCommit $repo "A" $event.commit --quiet=$quiet
                 } else if $event.kind == "renamed" {
-                    printRewrittenCommit "R" $event
+                    printRewrittenCommit $repo "R" $event --quiet=$quiet
                 } else if $event.kind == "rehashed" {
-                    printRewrittenCommit "M" $event
+                    printRewrittenCommit $repo "M" $event --quiet=$quiet
                 }
             }
-            printInputChanges $repo $inputs --quiet=$quiet
         }
-        def printLocalDiff [repo: string, files: list<record>, commits: list<record>, inputs: list<record>, --quiet] {
-            if ($files | is-empty) and ($commits | is-empty) and ($inputs | is-empty) { return }
+        def printLocalDiff [repo: string, files: list<record>, commits: list<record>, --quiet] {
+            if ($files | is-empty) and ($commits | is-empty) { return }
             printSectionHeading "local"
             printLocalFiles $files
             for commit in $commits {
-                printHistoryCommit $repo "A" $commit
+                printHistoryCommit $repo "A" $commit --quiet=$quiet
             }
-            printInputChanges $repo $inputs --quiet=$quiet
         }
-        def printCatastrophe [repo: string, diff: record] {
+        def printCatastrophe [repo: string, diff: record, --quiet] {
             print -e $"($REPORT_INDENT.item)($REPORT_COLOR.redBold)CATASTROPHE: ($diff.deleted | length) commits deleted, branch skipped($REPORT_COLOR.reset)"
             for commit in $diff.deleted {
-                printHistoryCommit $repo "D" $commit
+                printHistoryCommit $repo "D" $commit --quiet=$quiet
             }
             for commit in $diff.added {
-                printHistoryCommit $repo "A" $commit
+                printHistoryCommit $repo "A" $commit --quiet=$quiet
             }
         }
         def catastropheMarkerPathAt [root: string, repo: string, branch: string] {
@@ -131,9 +129,8 @@
                 }
             }
             printSectionHeading "remote"
-            printCatastrophe $repo $result.diff
-            printInputChanges $repo ($result.remoteInputs? | default []) --quiet
-            printLocalDiff $repo ($result.localFiles? | default []) [] ($result.localInputs? | default []) --quiet
+            printCatastrophe $repo $result.diff --quiet
+            printLocalDiff $repo ($result.localFiles? | default []) [] --quiet
             mkdir ($marker | path dirname)
             $result.candidate | save --force $marker
         }
@@ -149,38 +146,32 @@
             let diff = $result.diff? | default null
             let localFiles = $result.localFiles? | default []
             let pushed = $result.pushed? | default []
-            let localInputs = $result.localInputs? | default []
-            let remoteInputs = $result.remoteInputs? | default []
             let remoteEvents = if $diff == null { [] } else { $diff.events? | default [] }
             let rewritten = if $result.state == "rewritten" {
                 if $diff == null { false } else { ($diff.deleted | is-not-empty) or ($diff.added | is-not-empty) }
             } else { false }
-            ($result.state in [ "catastrophe" "both-moved" "conflict" ]) or ($localFiles | is-not-empty) or ($pushed | is-not-empty) or ($localInputs | is-not-empty) or ($remoteInputs | is-not-empty) or ($remoteEvents | is-not-empty) or $rewritten
+            ($result.state in [ "catastrophe" "both-moved" "conflict" ]) or ($localFiles | is-not-empty) or ($pushed | is-not-empty) or ($remoteEvents | is-not-empty) or $rewritten
         }
         def printBranchResult [repo: string, branch: string, result: record, --quiet] {
             if $result.state == "catastrophe" {
                 printBranchHeading $branch
                 let direction = $result.direction? | default "remote"
-                let localInputs = $result.localInputs? | default []
-                let remoteInputs = $result.remoteInputs? | default []
                 if $direction == "remote" {
                     printSectionHeading "remote"
-                    printCatastrophe $repo $result.diff
-                    printInputChanges $repo $remoteInputs --quiet=$quiet
-                    printLocalDiff $repo ($result.localFiles? | default []) [] $localInputs --quiet=$quiet
+                    printCatastrophe $repo $result.diff --quiet=$quiet
+                    printLocalDiff $repo ($result.localFiles? | default []) [] --quiet=$quiet
                 } else {
                     let remoteDiff = $result.remoteDiff? | default null
                     if $remoteDiff != null and not $remoteDiff.kept {
                         printSectionHeading "remote"
-                        for commit in $remoteDiff.deleted { printHistoryCommit $repo "D" $commit }
-                        for commit in $remoteDiff.added { printHistoryCommit $repo "A" $commit }
-                        printInputChanges $repo $remoteInputs --quiet=$quiet
+                        for commit in $remoteDiff.deleted { printHistoryCommit $repo "D" $commit --quiet=$quiet }
+                        for commit in $remoteDiff.added { printHistoryCommit $repo "A" $commit --quiet=$quiet }
                     } else {
-                        printRemoteDiff $repo ($remoteDiff | default { events: [] }) $remoteInputs --quiet=$quiet
+                        printRemoteDiff $repo ($remoteDiff | default { events: [] }) --quiet=$quiet
                     }
-                    printLocalDiff $repo ($result.localFiles? | default []) [] $localInputs --quiet=$quiet
-                    if ($result.localFiles? | default [] | is-empty) and ($localInputs | is-empty) { printSectionHeading "local" }
-                    printCatastrophe $repo $result.diff
+                    printLocalDiff $repo ($result.localFiles? | default []) [] --quiet=$quiet
+                    if ($result.localFiles? | default [] | is-empty) { printSectionHeading "local" }
+                    printCatastrophe $repo $result.diff --quiet=$quiet
                 }
                 return true
             }
@@ -199,25 +190,22 @@
             let diff = $result.diff?
             let localFiles = $result.localFiles? | default []
             let pushed = $result.pushed? | default []
-            let localInputs = $result.localInputs? | default []
-            let remoteInputs = $result.remoteInputs? | default ($diff.remoteInputs? | default [])
             let remoteChanged = if $result.state != "local-ahead" and $diff != null {
-                (($diff.events? | default []) | is-not-empty) or ($remoteInputs | is-not-empty)
+                (($diff.events? | default []) | is-not-empty)
             } else { false }
             let rewritten = if $result.state == "rewritten" {
                 if $diff == null { false } else { ($diff.deleted | is-not-empty) or ($diff.added | is-not-empty) }
             } else { false }
-            if not $remoteChanged and not $rewritten and ($localFiles | is-empty) and ($pushed | is-empty) and ($localInputs | is-empty) { return false }
+            if not $remoteChanged and not $rewritten and ($localFiles | is-empty) and ($pushed | is-empty) { return false }
             printBranchHeading $branch
             if $result.state == "rewritten" {
                 printSectionHeading "remote"
-                for commit in $diff.deleted { printHistoryCommit $repo "D" $commit }
-                for commit in $diff.added { printHistoryCommit $repo "A" $commit }
-                printInputChanges $repo $remoteInputs --quiet=$quiet
+                for commit in $diff.deleted { printHistoryCommit $repo "D" $commit --quiet=$quiet }
+                for commit in $diff.added { printHistoryCommit $repo "A" $commit --quiet=$quiet }
             } else if $remoteChanged {
-                printRemoteDiff $repo ($diff | default { events: [] }) $remoteInputs --quiet=$quiet
+                printRemoteDiff $repo ($diff | default { events: [] }) --quiet=$quiet
             }
-            printLocalDiff $repo $localFiles $pushed $localInputs --quiet=$quiet
+            printLocalDiff $repo $localFiles $pushed --quiet=$quiet
             true
         }
         def printRepoResults [repo: string, results: list<record>, --quiet] {

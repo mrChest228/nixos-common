@@ -15,25 +15,25 @@
                     if $branch == $current {
                         let fetched = (repoSync $repo)
                         let sync = if $fetched.state? == "catastrophe" and (confirmRewrite $repo $fetched.accepted $fetched.candidate) {
-                            applyRepoSync $repo $fetched.gitDir $branch $fetched.accepted $fetched.candidate $fetched.diff $fetched.remoteInputs --rewritten
+                            applyRepoSync $repo $fetched.gitDir $branch $fetched.accepted $fetched.candidate $fetched.diff --rewritten
                         } else {
                             $fetched
                         }
                         if $sync.state? == "catastrophe" {
-                            $sync | upsert localInputs (localFlakeInputs $repo "worktree")
+                            $sync
                         } else if not $sync.online {
                             (branchResult $branch false "offline")
                         } else {
                             let changes = if $no_add {
                                 commitRepo $repo (buildMessage "Sync") --no-add
                             } else {
-                                { files: (worktreeFiles $repo), committed: false, inputs: (localFlakeInputs $repo "worktree") }
+                                { files: (worktreeFiles $repo), committed: false }
                             }
                             let remote = (gitOut $repo rev-parse -q --verify $"origin/($branch)")
                             let local = (gitOut $repo rev-parse HEAD)
                             let commits = (commitsToPush $repo $remote $local)
                             let pushed = (repoPush $repo --report --on-rewrite { |accepted, candidate| confirmLocalRewrite $repo $accepted $candidate })
-                            if $pushed.state == "catastrophe" { ((($pushed | upsert localFiles $changes.files) | upsert localInputs $changes.inputs) | upsert remoteDiff $sync.diff?) | upsert remoteInputs ($sync.remoteInputs? | default []) } else { branchReport $sync $pushed $branch $changes.files $changes.inputs $commits }
+                            if $pushed.state == "catastrophe" { ($pushed | upsert localFiles $changes.files) | upsert remoteDiff $sync.diff? } else { branchReport $sync $pushed $branch $changes.files $commits }
                         }
                     } else {
                         repoSyncBranch $repo $branch "sync" --on-rewrite { |accepted, candidate| confirmRewrite $repo $accepted $candidate } --on-local-rewrite { |accepted, candidate| confirmLocalRewrite $repo $accepted $candidate }

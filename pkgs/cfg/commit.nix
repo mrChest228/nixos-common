@@ -12,7 +12,7 @@
             if not ($single and $target != $common) {
                 let sync = (repoSync $common --pause)
                 if $sync.online { clearCatastropheMarker $common (repoBranch $common) }
-                let printed = (commitAndPush $common $msg $sync.diff? ($sync.remoteInputs? | default []) --no-add=$no_add)
+                let printed = (commitAndPush $common $msg $sync.diff? --no-add=$no_add)
                 $anyPrinted = $anyPrinted or $printed
             }
 
@@ -30,7 +30,7 @@
                 if not $single and (lockedRev $repo) != (gitOut $common rev-parse HEAD) {  # common's current commit
                     updateCommonLock $repo
                 }
-                let printed = (commitAndPush $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg }) $sync.diff? ($sync.remoteInputs? | default []) --no-add=$no_add)
+                let printed = (commitAndPush $repo (if $all and $repo != $target { $"${vars.host}: Common flake has been updated" } else { $msg }) $sync.diff? --no-add=$no_add)
                 $anyPrinted = $anyPrinted or $printed
             }
             main perms

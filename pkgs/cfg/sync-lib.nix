@@ -27,14 +27,13 @@
         def branchResult [branch: string, online: bool, state: string] {
             { online: $online, state: $state, branch: $branch }
         }
-        def branchReport [sync: record, pushed: record, branch: string, localFiles: list<record>, localInputs: list<record>, commits: list<record>] {
+        def branchReport [sync: record, pushed: record, branch: string, localFiles: list<record>, commits: list<record>] {
             let state = if $sync.state? == "rewritten" { "rewritten" } else if $pushed.state == "offline" { "local-ahead" } else { $pushed.state }
-            { online: $pushed.online, state: $state, branch: $branch, diff: $sync.diff?, localFiles: $localFiles, localInputs: $localInputs, remoteInputs: ($sync.remoteInputs? | default []), pushed: (if $pushed.state in [ "pushed" "offline" ] { $commits } else { [] }) }
+            { online: $pushed.online, state: $state, branch: $branch, diff: $sync.diff?, localFiles: $localFiles, pushed: (if $pushed.state in [ "pushed" "offline" ] { $commits } else { [] }) }
         }
-        def catastropheResult [direction: string, branch: string, diff: record, accepted: string, candidate: string, localFiles?: any, remoteInputs?: any] {
+        def catastropheResult [direction: string, branch: string, diff: record, accepted: string, candidate: string, localFiles?: any] {
             let result = { online: true, state: "catastrophe", direction: $direction, branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate }
-            let result = if $localFiles == null { $result } else { $result | upsert localFiles $localFiles }
-            if $remoteInputs == null { $result } else { $result | upsert remoteInputs $remoteInputs }
+            if $localFiles == null { $result } else { $result | upsert localFiles $localFiles }
         }
         def runRepoBranches [repo: string, branches: list<string>, command: string, action: closure, --quiet] {
             mut ok = true
@@ -90,7 +89,7 @@
               "No route to host" "Connection timed out" "Connection refused" ]
             | any { |pat| $stderr | str contains $pat }
         }
-        def applyRepoSync [repo: string, gitDir: string, branch: string, accepted: any, candidate: string, diff: any, remoteInputs: list<record>, --rewritten] {
+        def applyRepoSync [repo: string, gitDir: string, branch: string, accepted: any, candidate: string, diff: any, --rewritten] {
             gitSafe $repo update-ref $"refs/remotes/origin/($branch)" $candidate
             # files changed only by mtime make --autostash bail out; refresh the index stat info first (nonzero when real changes exist)
             try { gitSafe $repo update-index -q --really-refresh } catch { }
@@ -107,7 +106,7 @@
             }
             # --autostash keeps the stash entry (and drops the changes from the worktree) when it can't re-apply cleanly
             if ((gitSafe $repo stash list | complete | get stdout | lines | length) > $stashCount) or ($rebase.stderr | str contains "safe in the stash") { error make { msg: $"($repo): local changes were kept in the stash, apply it manually" } }
-            { online: true, state: (if $rewritten { "rewritten" } else { "updated" }), branch: $branch, diff: $diff, candidate: $candidate, remoteInputs: $remoteInputs }
+            { online: true, state: (if $rewritten { "rewritten" } else { "updated" }), branch: $branch, diff: $diff, candidate: $candidate }
         }
         # Fetch the candidate and return rewrites for the caller to handle.
         def repoSync [repo: string, --pause] {
@@ -124,10 +123,9 @@
             let candidate = $fetch.candidate
             let acceptedResult = (gitSafe $repo rev-parse -q --verify $"origin/($branch)" | complete)
             let accepted = if $acceptedResult.exit_code == 0 { $acceptedResult.stdout | str trim } else { null }
-            let remoteInputs = (remoteFlakeInputs $repo ($accepted | default "") $candidate)
             let diff = if $accepted == null { null } else { historyDiff $repo $accepted $candidate }
-            if $accepted != null and not $diff.kept { return ((catastropheResult "remote" $branch $diff $accepted $candidate (worktreeFiles $repo) $remoteInputs) | upsert gitDir $gitDir) }
-            applyRepoSync $repo $gitDir $branch $accepted $candidate $diff $remoteInputs
+            if $accepted != null and not $diff.kept { return ((catastropheResult "remote" $branch $diff $accepted $candidate (worktreeFiles $repo)) | upsert gitDir $gitDir) }
+            applyRepoSync $repo $gitDir $branch $accepted $candidate $diff
         }
         # Push with a lease; sync and retry once after a rejection.
         def repoPush [repo: string, --no-retry, --report, --on-rewrite: closure] {
@@ -150,7 +148,7 @@
                 # remote moved between our fetch and push: sync again and retry once
                 let fetched = (repoSync $repo)
                 let sync = if $fetched.state? == "catastrophe" and $on_rewrite != null and (do $on_rewrite $fetched.accepted $fetched.candidate) {
-                    applyRepoSync $repo $fetched.gitDir $branch $fetched.accepted $fetched.candidate $fetched.diff $fetched.remoteInputs --rewritten
+                    applyRepoSync $repo $fetched.gitDir $branch $fetched.accepted $fetched.candidate $fetched.diff --rewritten
                 } else {
                     $fetched
                 }
@@ -191,17 +189,16 @@
                 }
             let candidate = $fetch.candidate
             let base = if $accepted == null { $candidate } else { $accepted }
-            let remoteInputs = (remoteFlakeInputs $repo ($accepted | default "") $candidate)
             if $local == $base {
                 let diff = (historyDiff $repo $base $candidate)
                 mut rewriteAccepted = false
                 if not $diff.kept {
-                    if $on_rewrite == null or not (do $on_rewrite $base $candidate) { return (catastropheResult "remote" $branch $diff $base $candidate null $remoteInputs) }
+                    if $on_rewrite == null or not (do $on_rewrite $base $candidate) { return (catastropheResult "remote" $branch $diff $base $candidate) }
                     $rewriteAccepted = true
                 }
                 if $local != $candidate { gitSafe $repo update-ref $"refs/heads/($branch)" $candidate $local }
                 updateRemoteBranchRef $repo $branch $candidate
-                return { online: true, state: (if $rewriteAccepted { "rewritten" } else if $local == $candidate { "up-to-date" } else { "updated" }), branch: $branch, diff: $diff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
+                return { online: true, state: (if $rewriteAccepted { "rewritten" } else if $local == $candidate { "up-to-date" } else { "updated" }), branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
             }
             if $candidate == $base {
                 let diff = (historyDiff $repo $base $local)
@@ -213,22 +210,22 @@
                         updateRemoteBranchRef $repo $branch $local
                         return { online: true, state: "pushed", branch: $branch, diff: $diff, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local) }
                     }
-                    return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $base, candidate: $local, remoteInputs: $remoteInputs }
+                    return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $base, candidate: $local }
                 }
                 if $action == "pull" {
                     if $accepted == null { updateRemoteBranchRef $repo $branch $candidate }
-                    return { online: true, state: "local-ahead", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
+                    return { online: true, state: "local-ahead", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
                 }
                 let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $base)
                 if $pushed.state == "offline" { return (branchResult $branch false "offline") }
                 if $pushed.state != "pushed" { error make { msg: $"($repo): push of branch ($branch) failed\n($pushed.stderr)" } }
                 updateRemoteBranchRef $repo $branch $local
-                return { online: true, state: "pushed", branch: $branch, diff: null, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local), remoteInputs: $remoteInputs }
+                return { online: true, state: "pushed", branch: $branch, diff: null, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local) }
             }
             let remoteDiff = (historyDiff $repo $base $candidate)
             let localDiff = (historyDiff $repo $base $local)
-            if not $remoteDiff.kept { if $on_rewrite == null or not (do $on_rewrite $base $candidate) { return (catastropheResult "remote" $branch $remoteDiff $base $candidate null $remoteInputs) } }
-            if not $localDiff.kept { return (catastropheResult "local" $branch $localDiff $base $local null $remoteInputs) }
+            if not $remoteDiff.kept { if $on_rewrite == null or not (do $on_rewrite $base $candidate) { return (catastropheResult "remote" $branch $remoteDiff $base $candidate) } }
+            if not $localDiff.kept { return (catastropheResult "local" $branch $localDiff $base $local) }
             let replay = (gitSafe $repo replay --onto $candidate $"($base)..refs/heads/($branch)" --ref-action=print | complete)
             if $replay.exit_code != 0 {
                 let merge = (gitSafe $repo merge-tree --write-tree --name-only --no-messages $candidate $local | complete)
@@ -245,7 +242,7 @@
                 updateRemoteBranchRef $repo $branch $replayed
                 return { online: true, state: "pushed", branch: $branch, diff: $remoteDiff, accepted: $base, candidate: $replayed, pushed: (commitsToPush $repo $candidate $replayed) }
             }
-            { online: true, state: "updated", branch: $branch, diff: $remoteDiff, accepted: $base, candidate: $candidate, remoteInputs: $remoteInputs }
+            { online: true, state: "updated", branch: $branch, diff: $remoteDiff, accepted: $base, candidate: $candidate }
         }
         # revision of the common input recorded in the repo's flake.lock (null if absent)
 ''

@@ -12,7 +12,7 @@
                 let batch = (runRepoBranches $repo $branches "pull" { |repo, branch|
                     if $branch == $current {
                         let sync = (repoSync $repo)
-                        if $sync.state? == "catastrophe" { $sync | upsert localInputs (localFlakeInputs $repo "worktree") } else { { online: $sync.online, state: ($sync.state? | default "up-to-date"), branch: $branch, diff: $sync.diff?, localFiles: (worktreeFiles $repo), localInputs: (localFlakeInputs $repo "worktree"), remoteInputs: ($sync.remoteInputs? | default []) } }
+                        if $sync.state? == "catastrophe" { $sync } else { { online: $sync.online, state: ($sync.state? | default "up-to-date"), branch: $branch, diff: $sync.diff?, localFiles: (worktreeFiles $repo) } }
                     } else {
                         repoSyncBranch $repo $branch "pull"
                     }

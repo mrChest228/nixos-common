@@ -18,12 +18,11 @@
                             (branchResult $branch false "offline")
                         } else {
                             let files = (worktreeFiles $repo)
-                            let inputs = (localFlakeInputs $repo "worktree")
                             let remote = (gitOut $repo rev-parse -q --verify $"origin/($branch)")
                             let local = (gitOut $repo rev-parse HEAD)
                             let commits = (commitsToPush $repo $remote $local)
                             let pushed = (repoPush $repo --report)
-                            if $pushed.state == "catastrophe" { ((($pushed | upsert localFiles $files) | upsert localInputs $inputs) | upsert remoteDiff $sync.diff?) | upsert remoteInputs ($sync.remoteInputs? | default []) } else { branchReport $sync $pushed $branch $files $inputs $commits }
+                            if $pushed.state == "catastrophe" { ($pushed | upsert localFiles $files) | upsert remoteDiff $sync.diff? } else { branchReport $sync $pushed $branch $files $commits }
                         }
                     } else {
                         repoSyncBranch $repo $branch "push"

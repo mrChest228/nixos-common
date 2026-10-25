@@ -100,13 +100,12 @@
         def commitRepo [repo: string, message: string, --no-add] {
             if not $no_add { gitSafe $repo add . }
             let files = if $no_add { worktreeFiles $repo --unstaged-only } else { [] }
-            let inputs = (localFlakeInputs $repo "index")
             let staged = (gitSafe $repo diff --cached --name-only | complete | get stdout)
             let committed = not ($staged | is-empty)
             if $committed { silent { gitSafe $repo commit -m $message } }
-            { files: $files, committed: $committed, inputs: $inputs }
+            { files: $files, committed: $committed }
         }
-        def commitAndPush [repo: string, message: string, remoteDiff?: record, remoteInputs?: list<record>, --no-add] {
+        def commitAndPush [repo: string, message: string, remoteDiff?: record, --no-add] {
             let changes = (commitRepo $repo $message --no-add=$no_add)
             let branch = (repoBranch $repo)
             let remote = (gitOut $repo rev-parse -q --verify $"origin/($branch)")
@@ -121,7 +120,7 @@
             let pending = if $pushed.state == "pushed" or $pushed.state == "offline" { $commits } else { [] }
             let state = if ($remoteDiff != null) and not $remoteDiff.kept { "rewritten" } else { $pushed.state }
             let state = if $state == "offline" { "local-ahead" } else { $state }
-            let result = { state: $state, branch: $branch, diff: $remoteDiff, localFiles: $changes.files, localInputs: $changes.inputs, remoteInputs: ($remoteInputs | default []), pushed: $pending }
+            let result = { state: $state, branch: $branch, diff: $remoteDiff, localFiles: $changes.files, pushed: $pending }
             if (branchHasReport $result) { printRepoHeading $repo }
             printBranchResult $repo $branch $result
         }
