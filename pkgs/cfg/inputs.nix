@@ -127,8 +127,8 @@
                     print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  (revChange $own.old $own.item)($REPORT_COLOR.reset)"
                 } else if $own.kind == "downgrade" {
                     print $"($indent)($REPORT_COLOR.magentaBold)~  ($root)  (revChange $own.old $own.item)($REPORT_COLOR.reset)"
-                } else if $own.kind == "source" {
-                    print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  ($own.old.original) -> ($own.item.original)($REPORT_COLOR.reset)"
+                } else if $own.kind == "source" {  # a root input can't follow, so this is always a new url
+                    print $"($indent)($REPORT_COLOR.redBold)!  ($root)  ($own.old.original) -> ($own.item.original)($REPORT_COLOR.reset)"
                 } else if $own.kind == "narHash" {
                     print $"($indent)($REPORT_COLOR.redBold)!  ($root)  narHash changed for the same rev($REPORT_COLOR.reset)"
                 }
@@ -149,7 +149,8 @@
                     } else {
                         revChange $change.old $change.item
                     }
-                    let color = if $tail in [ "missing" "narHash changed for the same rev" ] { $REPORT_COLOR.redBold } else { $REPORT_COLOR.yellow }
+                    let urlChanged = $change.kind == "source" and $change.old.follows == $follows
+                    let color = if $urlChanged or $tail in [ "missing" "narHash changed for the same rev" ] { $REPORT_COLOR.redBold } else { $REPORT_COLOR.yellow }
                     print $"($nestedIndent)($color)($head)(if ($tail | is-empty) { "" } else { "  " + $tail })($REPORT_COLOR.reset)"
                 }
             }
