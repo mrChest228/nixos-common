@@ -35,25 +35,23 @@
             let result = { online: true, state: "catastrophe", direction: $direction, branch: $branch, diff: $diff, accepted: $accepted, candidate: $candidate }
             if $localFiles == null { $result } else { $result | upsert localFiles $localFiles }
         }
-        def runRepoBranches [repo: string, branches: list<string>, command: string, action: closure, --quiet] {
+        # runs action per branch, collecting results; offline stops the repo (quietly for the service, which retries anyway)
+        def runRepoBranches [repo: string, branches: list<string>, action: closure, --quiet] {
             mut ok = true
             mut results = []
             for branch in $branches {
                 let result = (try {
                     do $action $repo $branch
                 } catch { |e|
-                    let target = if $command == "sync" { $"($repo)/($branch)" } else { $repo }
-                    reportProblem $target ($e.msg? | default $"($e)") --quiet=$quiet
+                    reportProblem $"($repo)/($branch)" ($e.msg? | default $"($e)") --quiet=$quiet
                     null
                 })
                 if $result == null {
                     $ok = false
                 } else if not $result.online {
-                    if $command == "sync" {
+                    if not $quiet {
                         print $"($REPORT_COLOR.redBold)($repo)/($branch): offline, sync skipped($REPORT_COLOR.reset)"
                         $ok = false
-                    } else if not $quiet {
-                        print $"($REPORT_COLOR.redBold)($repo): offline, ($command) skipped($REPORT_COLOR.reset)"
                     }
                     break
                 } else if $result.state == "catastrophe" {
@@ -172,7 +170,7 @@
             if $report { { online: true, state: "pushed", branch: $branch } } else { true }
         }
         # syncs one local branch without checking it out
-        def repoSyncBranch [repo: string, branch: string, action: string, --on-rewrite: closure, --on-local-rewrite: closure] {
+        def repoSyncBranch [repo: string, branch: string, --on-rewrite: closure, --on-local-rewrite: closure] {
             checkRepoState $repo
             let local = (gitOut $repo rev-parse $"refs/heads/($branch)")
             let acceptedResult = (gitSafe $repo rev-parse -q --verify $"refs/remotes/origin/($branch)" | complete)
@@ -180,7 +178,6 @@
             let fetch = (fetchCandidate $repo $branch)
             if not $fetch.online { return (branchResult $branch false "offline") }
             if $fetch.state == "missing" {
-                    if $action == "pull" { return { online: true, state: "origin-missing", branch: $branch } }
                     let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" "")
                     if $pushed.state == "offline" { return (branchResult $branch false "offline") }
                     if $pushed.state != "pushed" { error make { msg: $"($repo): push of new branch ($branch) failed\n($pushed.stderr)" } }
@@ -203,7 +200,7 @@
             if $candidate == $base {
                 let diff = (historyDiff $repo $base $local)
                 if not $diff.kept {
-                    if $action == "sync" and $on_local_rewrite != null and (do $on_local_rewrite $base $local) {
+                    if $on_local_rewrite != null and (do $on_local_rewrite $base $local) {
                         let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $base)
                         if $pushed.state == "offline" { return (branchResult $branch false "offline") }
                         if $pushed.state != "pushed" { error make { msg: $"($repo): push of rewritten branch ($branch) failed\n($pushed.stderr)" } }
@@ -211,10 +208,6 @@
                         return { online: true, state: "pushed", branch: $branch, diff: $diff, accepted: $base, candidate: $local, pushed: (commitsToPush $repo $base $local) }
                     }
                     return { online: true, state: "catastrophe", direction: "local", branch: $branch, diff: $diff, accepted: $base, candidate: $local }
-                }
-                if $action == "pull" {
-                    if $accepted == null { updateRemoteBranchRef $repo $branch $candidate }
-                    return { online: true, state: "local-ahead", branch: $branch, diff: $diff, accepted: $base, candidate: $candidate }
                 }
                 let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $base)
                 if $pushed.state == "offline" { return (branchResult $branch false "offline") }
@@ -235,7 +228,7 @@
             if not ($replay.stdout | str trim | is-empty) { $replay.stdout | gitSafe $repo update-ref --stdin }
             updateRemoteBranchRef $repo $branch $candidate
             let replayed = (gitOut $repo rev-parse $"refs/heads/($branch)")
-            if $action in [ "push" "sync" ] and $replayed != $candidate {
+            if $replayed != $candidate {
                 let pushed = (pushCandidate $repo $branch $"refs/heads/($branch)" $candidate)
                 if $pushed.state == "offline" { return { online: false, state: "offline", branch: $branch, diff: $remoteDiff, pushed: (commitsToPush $repo $candidate $replayed) } }
                 if $pushed.state != "pushed" { error make { msg: $"($repo): push of replayed branch ($branch) failed\n($pushed.stderr)" } }
