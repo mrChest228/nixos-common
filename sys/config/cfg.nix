@@ -18,10 +18,10 @@
                 description = "Pull and push the config repos";
                 serviceConfig = {
                     Type = "oneshot";
-                    ExecStart = [
-                        "${pkgs.cfg}/bin/cfg pull --quiet"
-                        "${pkgs.cfg}/bin/cfg push --quiet"
-                    ];
+                    # not `cfg sync`: only that command may accept a rewritten history (after a question in the
+                    # terminal), the service must never have that path. `cfg push` fetches and rebases every
+                    # local branch before pushing, so a separate `cfg pull` would only repeat the work.
+                    ExecStart = "${pkgs.cfg}/bin/cfg push --quiet";
                     # syncing never delays real work
                     CPUSchedulingPolicy = "idle";
                     IOSchedulingClass = "idle";
