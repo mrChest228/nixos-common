@@ -105,23 +105,17 @@
             { touched: ($beforeText != $afterText), changes: (compareFlakeInputs $before $after) }
         }
         def shortRev [rev: string] { if ($rev | is-empty) { "" } else { $rev | str substring 0..7 } }
-        # Lock changes of one commit at the indent of its files: one bold row per root input, its changed
-        # follows below in white (name -> target). Nested entries that merely track an updated root input are skipped.
+        def revChange [old: record, new: record] {
+            $"(shortRev $old.rev) -> (shortRev $new.rev)  ($REPORT_COLOR.darkGray)($old.date) -> ($new.date)"
+        }
+        # Lock changes of one commit at the indent of its files: one bold row per root input, every change
+        # inside it below in thin dark yellow (`name = target` for follows, `name  old -> new` for own inputs).
         def printInputChanges [changes: list<record>, indent: string] {
             let nestedIndent = ($indent + "   ")
-            # nested entries worth a line: follows that appeared, vanished, moved or point nowhere, and the
-            # contents of an added input; the rest only repeats the root row (e.g. a follows of an updated input)
-            let nested = ($changes | where { |change| $change.item.path | str contains "/" } | where { |change|
-                let follows = $change.item.follows
-                let root = ($change.item.path | split row "/" | first)
-                let rootAdded = ($changes | any { |other| $other.item.path == $root and $other.kind == "added" })
-                let missing = (not ($follows | is-empty)) and ($change.item.rev | is-empty) and ($change.item.original | is-empty)
-                $missing or $change.kind == "removed" or ($change.kind == "source" and $change.old.follows != $follows) or ($change.kind == "added" and ($rootAdded or not ($follows | is-empty)))
-            })
-            let roots = (($changes | where { |change| not ($change.item.path | str contains "/") }) ++ $nested | each { |change| $change.item.path | split row "/" | first } | uniq | sort)
+            let roots = ($changes | each { |change| $change.item.path | split row "/" | first } | uniq | sort)
             for root in $roots {
                 let own = ($changes | where { |change| $change.item.path == $root } | get -o 0)
-                let nested = ($nested | where { |change| $change.item.path | str starts-with ($root + "/") })
+                let nested = ($changes | where { |change| $change.item.path | str starts-with ($root + "/") })
                 if $own == null {
                     print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)($REPORT_COLOR.reset)"
                 } else if $own.kind == "added" {
@@ -129,8 +123,10 @@
                 } else if $own.kind == "removed" {
                     print $"($indent)($REPORT_COLOR.redBold)-  ($root)($REPORT_COLOR.reset)"
                     continue
-                } else if $own.kind in [ "updated" "downgrade" ] {
-                    print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  (shortRev $own.old.rev) -> (shortRev $own.item.rev)  ($REPORT_COLOR.darkGray)($own.old.date) -> ($own.item.date)($REPORT_COLOR.reset)"
+                } else if $own.kind == "updated" {
+                    print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  (revChange $own.old $own.item)($REPORT_COLOR.reset)"
+                } else if $own.kind == "downgrade" {
+                    print $"($indent)($REPORT_COLOR.magentaBold)~  ($root)  (revChange $own.old $own.item)($REPORT_COLOR.reset)"
                 } else if $own.kind == "source" {
                     print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  ($own.old.original) -> ($own.item.original)($REPORT_COLOR.reset)"
                 } else if $own.kind == "narHash" {
@@ -139,17 +135,22 @@
                 for change in $nested {
                     let name = ($change.item.path | str substring (($root | str length) + 1)..)
                     let follows = $change.item.follows
-                    if ($follows | is-empty) {
-                        print $"($nestedIndent)($REPORT_COLOR.white)($name)  ($change.item.original)  (shortRev $change.item.rev)($REPORT_COLOR.reset)"
-                    } else if ($change.item.rev | is-empty) and ($change.item.original | is-empty) {
-                        print $"($nestedIndent)($REPORT_COLOR.redBold)($name) -> ($follows)  missing($REPORT_COLOR.reset)"
+                    let head = if ($follows | is-empty) { $name } else { $"($name) = ($follows)" }
+                    let tail = if (not ($follows | is-empty)) and ($change.item.rev | is-empty) and ($change.item.original | is-empty) {
+                        "missing"
                     } else if $change.kind == "removed" {
-                        print $"($nestedIndent)($REPORT_COLOR.white)($name) -> ($follows)  removed($REPORT_COLOR.reset)"
+                        "removed"
+                    } else if $change.kind == "added" {
+                        if ($follows | is-empty) { $"($change.item.original)  (shortRev $change.item.rev)" } else { "" }
                     } else if $change.kind == "source" {
-                        print $"($nestedIndent)($REPORT_COLOR.white)($name) -> ($follows)  \(was ($change.old.follows | default "none")\)($REPORT_COLOR.reset)"
+                        if $change.old.follows != $follows { $"\(was (if ($change.old.follows | is-empty) { $change.old.original } else { $change.old.follows })\)" } else { $"($change.old.original) -> ($change.item.original)" }
+                    } else if $change.kind == "narHash" {
+                        "narHash changed for the same rev"
                     } else {
-                        print $"($nestedIndent)($REPORT_COLOR.white)($name) -> ($follows)($REPORT_COLOR.reset)"
+                        revChange $change.old $change.item
                     }
+                    let color = if $tail in [ "missing" "narHash changed for the same rev" ] { $REPORT_COLOR.redBold } else { $REPORT_COLOR.yellow }
+                    print $"($nestedIndent)($color)($head)(if ($tail | is-empty) { "" } else { "  " + $tail })($REPORT_COLOR.reset)"
                 }
             }
         }
