@@ -106,12 +106,16 @@
             if ((gitSafe $repo stash list | complete | get stdout | lines | length) > $stashCount) or ($rebase.stderr | str contains "safe in the stash") { error make { msg: $"($repo): local changes were kept in the stash, apply it manually" } }
             { online: true, state: (if $rewritten { "rewritten" } else { "updated" }), branch: $branch, diff: $diff, candidate: $candidate }
         }
+        # true when the repo fetched less than `span` ago (FETCH_HEAD mtime); rate limit for commit and the service
+        def fetchedWithin [repo: string, span: duration] {
+            let fetchHead = $"($repo)/(checkRepoState $repo)/FETCH_HEAD"
+            ($fetchHead | path exists) and (((date now) - (ls -D $fetchHead | get 0 | get modified)) < $span)
+        }
         # Fetch the candidate and return rewrites for the caller to handle.
         def repoSync [repo: string, --pause] {
             let gitDir = (checkRepoState $repo)
             let branch = (repoBranch $repo)
-            let fetchHead = $"($repo)/($gitDir)/FETCH_HEAD"
-            if $pause and ($fetchHead | path exists) and (((date now) - (ls -D $fetchHead | get 0 | get modified)) < 3min) { return { online: true } }
+            if $pause and (fetchedWithin $repo 3min) { return { online: true } }
             # --refmap keeps the fetched candidate separate from configured origin refspecs.
             let fetch = (fetchCandidate $repo $branch)
             if not $fetch.online { return { online: false, state: "offline" } }

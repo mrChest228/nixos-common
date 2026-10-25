@@ -13,6 +13,7 @@
             mut ok = true
             mut anyPrinted = false
             for repo in $repos {
+                if $quiet and (fetchedWithin $repo 90sec) { continue }  # the NM hook may fire right after a timer run
                 let current = (repoBranch $repo)
                 let local = (repoBranches $repo)
                 let branches = if ($branch | is-not-empty) {
