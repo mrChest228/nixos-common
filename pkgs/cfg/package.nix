@@ -8,7 +8,7 @@
 #     n is negative; omitted/-0 renames HEAD and -1 renames its parent
 #   cfg pull [--host (-h) <host|cur|com>] [--quiet (-q)] — fetch and rebase from origin
 #   cfg push [--host (-h) <host|cur|com>] [--quiet (-q)] — sync, then push local commits
-#   cfg sync [--host (-h) <host|cur|com>] [--all (-a)] [--no-add (-n)] — sync branches, confirming origin rewrites
+#   cfg sync [--host (-h) <host|cur|com>] [--all (-a)] — sync branches, confirming origin rewrites
 #   cfg perms — repair config repository permissions
 # Examples:
 #   cfg commit "niri: blur"

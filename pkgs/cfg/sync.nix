@@ -1,9 +1,9 @@
 { vars }:
 ''
-        # Usage: cfg sync [--host (-h) <host|cur|com>] [--all (-a)] [--no-add (-n)]
+        # Usage: cfg sync [--host (-h) <host|cur|com>] [--all (-a)]
         # what cfg-sync.service does, by hand: pull then push each repo. The only command that may take a
         # rewritten origin history, and only after confirmRewrite showed the damage and got a "yes"
-        def "main sync" [--host(-h): string, --all(-a), --no-add(-n)] {
+        def "main sync" [--host(-h): string, --all(-a)] {
             checkNoForeign
             let repos = if ($host | is-not-empty) { [ (hostRepo $host) ] } else { [ "${vars.configPath}/common" ] ++ (hostRepos) }
             mut ok = true
@@ -24,11 +24,7 @@
                         } else if not $sync.online {
                             (branchResult $branch false "offline")
                         } else {
-                            let changes = if $no_add {
-                                commitRepo $repo (buildMessage "Sync") --no-add
-                            } else {
-                                { files: (worktreeFiles $repo), committed: false }
-                            }
+                            let changes = { files: (worktreeFiles $repo), committed: false }
                             let remote = (gitOut $repo rev-parse -q --verify $"origin/($branch)")
                             let local = (gitOut $repo rev-parse HEAD)
                             let commits = (commitsToPush $repo $remote $local)
