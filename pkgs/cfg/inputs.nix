@@ -146,7 +146,7 @@
                     } else if $change.kind == "removed" {
                         "removed"
                     } else if $change.kind == "added" {
-                        if ($follows | is-empty) { $"($change.item.original)  (shortRev $change.item.rev)" } else { "" }
+                        if ($follows | is-empty) { $"($change.item.original)  (shortRev $change.item.rev) ($REPORT_COLOR.darkGray)($change.item.date)($REPORT_COLOR.reset)($color)" } else { "" }
                     } else if $change.kind == "source" {
                         if $urlChanged { arrows $"($change.old.original) -> ($change.item.original)" $color --bold } else { $"\(was (if ($change.old.follows | is-empty) { $change.old.original } else { $change.old.follows })\)" }
                     } else if $change.kind == "narHash" {
