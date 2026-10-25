@@ -1,7 +1,7 @@
 { pkgs, vars }:
 ''
         const REPORT_INDENT = { branch: "   ", section: "      ", item: "         ", detail: "            " }
-        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }
+        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }
         def unicodeOutput [] {
             let term = ($env.TERM? | default "")
             let locales = [ ($env.LC_ALL? | default "") ($env.LC_CTYPE? | default "") ($env.LANG? | default "") ]
@@ -50,10 +50,9 @@
         }
         # one row per file: status from --name-status, +added/-deleted lines from --numstat (same order; "-" for binary);
         # --mtime adds the worktree modification time (local commits only, fetched files carry the pull time)
-        def printCommitFiles [repo: string, hash: string, --mtime, --gap] {
+        def printCommitFiles [repo: string, hash: string, --mtime] {
             let rows = (gitSafe $repo diff-tree --no-commit-id -r --name-status -M -C --root $hash | complete | get stdout | lines)
             let stats = (gitSafe $repo diff-tree --no-commit-id -r --numstat -M -C --root $hash | complete | get stdout | lines)
-            if $gap and ($rows | is-not-empty) { print "" }
             for entry in ($rows | enumerate) {
                 let parts = ($entry.item | split row (char tab))
                 let letter = ($parts | first | str substring 0..0)
@@ -69,11 +68,16 @@
                 printFileLine $REPORT_INDENT.detail $letter $"($path)($counts)" $date
             }
         }
-        # flake.lock input changes go first, then a blank line and the files
+        # with lock changes a commit gets two blocks, "Inputs:" then "Files:", both at the file indent
         def printCommitDetails [repo: string, hash: string, --mtime] {
             let changes = (commitFlakeInputs $repo $hash).changes
-            printInputChanges $changes $REPORT_INDENT.detail
-            printCommitFiles $repo $hash --mtime=$mtime --gap=($changes | is-not-empty)
+            if ($changes | is-not-empty) {
+                print $"($REPORT_INDENT.detail)($REPORT_COLOR.section)Inputs:($REPORT_COLOR.reset)"
+                printInputChanges $changes $REPORT_INDENT.detail
+                print ""
+                print $"($REPORT_INDENT.detail)($REPORT_COLOR.section)Files:($REPORT_COLOR.reset)"
+            }
+            printCommitFiles $repo $hash --mtime=$mtime
         }
         def printHistoryCommit [repo: string, letter: string, commit: record, --mtime] {
             let mark = (changeMark $letter)
@@ -197,7 +201,7 @@
                 printBranchHeading $branch
                 let files = $result.conflictFiles? | default []
                 let where = if ($files | is-empty) { "" } else { " in " + ($files | str join ", ") }
-                print $"($REPORT_INDENT.section)($REPORT_COLOR.redBold)merge conflict($where), branch skipped($REPORT_COLOR.reset)"
+                print $"($REPORT_INDENT.section)($REPORT_COLOR.redBold)Merge conflict($where), branch skipped($REPORT_COLOR.reset)"
                 return true
             }
             let diff = $result.diff?
