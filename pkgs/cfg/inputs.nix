@@ -105,8 +105,10 @@
             { touched: ($beforeText != $afterText), changes: (compareFlakeInputs $before $after) }
         }
         def shortRev [rev: string] { if ($rev | is-empty) { "" } else { $rev | str substring 0..7 } }
-        def revChange [old: record, new: record] {
-            $"(shortRev $old.rev) -> (shortRev $new.rev)  ($REPORT_COLOR.darkGray)($old.date) -> ($new.date)"
+        def revChange [old: record, new: record, color: string, --bold] {
+            let revs = (arrows $"(shortRev $old.rev) -> (shortRev $new.rev)" $color --bold=$bold)
+            let dates = (arrows $"($old.date) -> ($new.date)" $REPORT_COLOR.darkGray --bold=$bold)
+            $"($revs)  ($REPORT_COLOR.darkGray)($dates)"
         }
         # Lock changes of one commit at the indent of its files: one bold row per root input, every change
         # inside it below in thin dark yellow (`name = target` for follows, `name  old -> new` for own inputs).
@@ -124,11 +126,11 @@
                     print $"($indent)($REPORT_COLOR.redBold)-  ($root)($REPORT_COLOR.reset)"
                     continue
                 } else if $own.kind == "updated" {
-                    print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  (revChange $own.old $own.item)($REPORT_COLOR.reset)"
+                    print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)  (revChange $own.old $own.item $REPORT_COLOR.yellowBold --bold)($REPORT_COLOR.reset)"
                 } else if $own.kind == "downgrade" {
-                    print $"($indent)($REPORT_COLOR.magentaBold)~  ($root)  (revChange $own.old $own.item)($REPORT_COLOR.reset)"
+                    print $"($indent)($REPORT_COLOR.magentaBold)~  ($root)  (revChange $own.old $own.item $REPORT_COLOR.magentaBold --bold)($REPORT_COLOR.reset)"
                 } else if $own.kind == "source" {  # a root input can't follow, so this is always a new url
-                    print $"($indent)($REPORT_COLOR.redBold)!  ($root)  ($own.old.original) -> ($own.item.original)($REPORT_COLOR.reset)"
+                    print $"($indent)($REPORT_COLOR.redBold)!  ($root)  (arrows $"($own.old.original) -> ($own.item.original)" $REPORT_COLOR.redBold --bold)($REPORT_COLOR.reset)"
                 } else if $own.kind == "narHash" {
                     print $"($indent)($REPORT_COLOR.redBold)!  ($root)  narHash changed for the same rev($REPORT_COLOR.reset)"
                 }
@@ -136,21 +138,22 @@
                     let name = ($change.item.path | str substring (($root | str length) + 1)..)
                     let follows = $change.item.follows
                     let head = if ($follows | is-empty) { $name } else { $"($name) = ($follows)" }
-                    let tail = if (not ($follows | is-empty)) and ($change.item.rev | is-empty) and ($change.item.original | is-empty) {
+                    let urlChanged = $change.kind == "source" and $change.old.follows == $follows
+                    let missing = (not ($follows | is-empty)) and ($change.item.rev | is-empty) and ($change.item.original | is-empty)
+                    let color = if $urlChanged or $missing or $change.kind == "narHash" { $REPORT_COLOR.redBold } else { $REPORT_COLOR.yellow }
+                    let tail = if $missing {
                         "missing"
                     } else if $change.kind == "removed" {
                         "removed"
                     } else if $change.kind == "added" {
                         if ($follows | is-empty) { $"($change.item.original)  (shortRev $change.item.rev)" } else { "" }
                     } else if $change.kind == "source" {
-                        if $change.old.follows != $follows { $"\(was (if ($change.old.follows | is-empty) { $change.old.original } else { $change.old.follows })\)" } else { $"($change.old.original) -> ($change.item.original)" }
+                        if $urlChanged { arrows $"($change.old.original) -> ($change.item.original)" $color --bold } else { $"\(was (if ($change.old.follows | is-empty) { $change.old.original } else { $change.old.follows })\)" }
                     } else if $change.kind == "narHash" {
                         "narHash changed for the same rev"
                     } else {
-                        revChange $change.old $change.item
+                        revChange $change.old $change.item $color
                     }
-                    let urlChanged = $change.kind == "source" and $change.old.follows == $follows
-                    let color = if $urlChanged or $tail in [ "missing" "narHash changed for the same rev" ] { $REPORT_COLOR.redBold } else { $REPORT_COLOR.yellow }
                     print $"($nestedIndent)($color)($head)(if ($tail | is-empty) { "" } else { "  " + $tail })($REPORT_COLOR.reset)"
                 }
             }

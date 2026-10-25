@@ -1,7 +1,7 @@
 { pkgs, vars }:
 ''
         const REPORT_INDENT = { branch: "   ", section: "      ", item: "         ", detail: "            " }
-        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }
+        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), whiteBold: (ansi --escape '1;37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }
         def unicodeOutput [] {
             let term = ($env.TERM? | default "")
             let locales = [ ($env.LC_ALL? | default "") ($env.LC_CTYPE? | default "") ($env.LANG? | default "") ]
@@ -27,6 +27,11 @@
                 _ => { text: $letter, color: $REPORT_COLOR.blue }
             }
         }
+        # every "->" is white (bold in bold rows); the row colour is reopened after it
+        def arrows [text: string, color: string, --bold] {
+            let white = if $bold { $REPORT_COLOR.whiteBold } else { $REPORT_COLOR.white }
+            $text | str replace --all " -> " $" ($white)->($REPORT_COLOR.reset)($color) "
+        }
         def printBranchHeading [branch: string] {
             print $"($REPORT_INDENT.branch)($REPORT_COLOR.branch)($branch):($REPORT_COLOR.reset)"
         }
@@ -41,7 +46,7 @@
             let mark = (changeMark $letter)
             let color = if $dark { $REPORT_COLOR.darkGray } else { $mark.color }
             let dateText = if ($date | is-empty) { "" } else { $"  ($REPORT_COLOR.darkGray)($date)($REPORT_COLOR.reset)" }
-            print $"($indent)($color)($mark.text)  ($path)($REPORT_COLOR.reset)($dateText)"
+            print $"($indent)($color)($mark.text)  (arrows $path $color)($REPORT_COLOR.reset)($dateText)"
         }
         def printLocalFiles [files: list<record>] {
             for file in $files {
@@ -90,7 +95,7 @@
             let mark = (changeMark $letter)
             let oldHash = ($event.oldHash | str substring 0..7)
             let newHash = ($event.newHash | str substring 0..7)
-            print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject) ($REPORT_COLOR.white)->($REPORT_COLOR.reset) ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
+            print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject)(arrows " -> " $mark.color)($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
             printInputChanges (commitFlakeInputs $repo $event.newHash).changes $REPORT_INDENT.detail
         }
         def printRemoteDiff [repo: string, diff: record] {
