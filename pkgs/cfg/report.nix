@@ -15,6 +15,7 @@
         }
         def changeMark [letter: string] {
             match $letter {
+                "" => { text: " ", color: $REPORT_COLOR.reset }
                 "A" => { text: "+", color: $REPORT_COLOR.green }
                 "D" => { text: "-", color: $REPORT_COLOR.red }
                 "M" => { text: "~", color: $REPORT_COLOR.yellow }
@@ -47,18 +48,19 @@
                 printFileLine $REPORT_INDENT.item $file.letter $file.path $file.date --dark
             }
         }
+        # one row per file: status from --name-status, +added/-deleted lines from --numstat (same order; "-" for binary)
         def printCommitFiles [repo: string, hash: string] {
             let rows = (gitSafe $repo diff-tree --no-commit-id -r --name-status -M -C --root $hash | complete | get stdout | lines)
-            for row in $rows {
-                let parts = ($row | split row (char tab))
-                let status = ($parts | first)
-                let letter = ($status | str substring 0..0)
-                let path = if $letter in [ "R" "C" ] {
-                    $"($parts | get 1) -> ($parts | get 2)"
-                } else {
-                    $parts | get 1
+            let stats = (gitSafe $repo diff-tree --no-commit-id -r --numstat -M -C --root $hash | complete | get stdout | lines)
+            for entry in ($rows | enumerate) {
+                let parts = ($entry.item | split row (char tab))
+                let letter = ($parts | first | str substring 0..0)
+                let path = if $letter in [ "R" "C" ] { $"($parts | get 1) -> ($parts | get 2)" } else { $parts | get 1 }
+                let stat = ($stats | get -o $entry.index | default "" | split row (char tab))
+                let counts = if $letter == "T" or ($stat | length) < 2 or $stat.0 == "-" { "" } else {
+                    $" ($REPORT_COLOR.white)\(($REPORT_COLOR.green)+($stat.0)($REPORT_COLOR.white) ($REPORT_COLOR.red)-($stat.1)($REPORT_COLOR.white)\)($REPORT_COLOR.reset)"
                 }
-                printFileLine $REPORT_INDENT.detail $letter $path ""
+                printFileLine $REPORT_INDENT.detail $letter $"($path)($counts)" ""
             }
         }
         def printHistoryCommit [repo: string, letter: string, commit: record, --quiet] {
@@ -87,7 +89,7 @@
                 } else if $event.kind == "renamed" {
                     printRewrittenCommit $repo "R" $event --quiet=$quiet
                 } else if $event.kind == "rehashed" {
-                    printRewrittenCommit $repo "M" $event --quiet=$quiet
+                    printRewrittenCommit $repo "" $event --quiet=$quiet
                 }
             }
         }
