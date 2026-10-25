@@ -4,7 +4,6 @@
         groups = [ "wheel" ];
         commands = map (command: { inherit command; options = [ "NOPASSWD" ]; }) [
             "${pkgs.cfg}/bin/cfg"
-            "${pkgs.update}/bin/update"
             "${pkgs.rebuild}/bin/rebuild"
             "${pkgs.reconf}/bin/reconf"
         ];
