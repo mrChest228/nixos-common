@@ -104,38 +104,31 @@
             let after = (flakeLockInputs $afterText)
             { touched: ($beforeText != $afterText), changes: (compareFlakeInputs $before $after) }
         }
-        def printInputChanges [repo: string, changes: list<record>, indent: string, --quiet] {
-            let changeIndent = ($indent + "   ")
-            let followIndent = ($changeIndent + "   ")
-            print $"($indent)($REPORT_COLOR.section)inputs($REPORT_COLOR.reset)"
+        # lock changes of one commit, printed at the same indent as its files
+        def printInputChanges [changes: list<record>, indent: string] {
+            let followIndent = ($indent + "   ")
             for change in $changes {
                 let path = $change.item.path
                 if $change.kind == "added" {
                     let item = $change.item
                     let rev = if ($item.rev | is-empty) { "" } else { $item.rev | str substring 0..7 }
-                    print $"($changeIndent)($REPORT_COLOR.greenBold)A  ($path)  ($item.original)  ($rev)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($item.date)($REPORT_COLOR.reset)"
+                    print $"($indent)($REPORT_COLOR.greenBold)+  ($path)  ($item.original)  ($rev)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($item.date)($REPORT_COLOR.reset)"
                     if not ($item.follows | is-empty) { print $"($followIndent)follows: ($item.follows)" }
                 } else if $change.kind == "removed" {
-                    print $"($changeIndent)($REPORT_COLOR.redBold)D  ($path)($REPORT_COLOR.reset)"
+                    print $"($indent)($REPORT_COLOR.redBold)-  ($path)($REPORT_COLOR.reset)"
                 } else if $change.kind == "updated" or $change.kind == "downgrade" {
                     let oldRev = if ($change.old.rev | is-empty) { "" } else { $change.old.rev | str substring 0..7 }
                     let newRev = if ($change.item.rev | is-empty) { "" } else { $change.item.rev | str substring 0..7 }
                     let color = if $change.kind == "updated" { $REPORT_COLOR.yellow } else { $REPORT_COLOR.magentaBold }
-                    let mark = if $change.kind == "updated" { "M" } else { "v" }
-                    print $"($changeIndent)($color)($mark)  ($path)  ($oldRev) -> ($newRev)  ($REPORT_COLOR.darkGray)($change.old.date) -> ($change.item.date)($REPORT_COLOR.reset)"
+                    let mark = if $change.kind == "updated" { "~" } else { "v" }
+                    print $"($indent)($color)($mark)  ($path)  ($oldRev) -> ($newRev)  ($REPORT_COLOR.darkGray)($change.old.date) -> ($change.item.date)($REPORT_COLOR.reset)"
                 } else if $change.kind == "source" {
-                    let color = $REPORT_COLOR.yellowBold
-                    let oldSource = if $change.old.follows != $change.item.follows {
-                        $"follows: (if ($change.old.follows | is-empty) { "none" } else { $change.old.follows })"
-                    } else { $change.old.original }
-                    let newSource = if $change.old.follows != $change.item.follows {
-                        (if ($change.item.follows | is-empty) { "none" } else { $change.item.follows })
-                    } else { $change.item.original }
-                    print $"($changeIndent)($color)S  ($path)  ($oldSource) -> ($newSource)($REPORT_COLOR.reset)"
+                    let followsChanged = $change.old.follows != $change.item.follows
+                    let oldSource = if $followsChanged { $"follows: (if ($change.old.follows | is-empty) { "none" } else { $change.old.follows })" } else { $change.old.original }
+                    let newSource = if $followsChanged { (if ($change.item.follows | is-empty) { "none" } else { $change.item.follows }) } else { $change.item.original }
+                    print $"($indent)($REPORT_COLOR.yellowBold)>  ($path)  ($oldSource) -> ($newSource)($REPORT_COLOR.reset)"
                 } else if $change.kind == "narHash" {
-                    let message = $"($path): narHash changed for the same rev"
-                    print $"($changeIndent)($REPORT_COLOR.redBold)!  ($message)($REPORT_COLOR.reset)"
-                    if $quiet { reportProblem $repo $message --quiet }
+                    print $"($indent)($REPORT_COLOR.redBold)!  ($path): narHash changed for the same rev($REPORT_COLOR.reset)"
                 }
             }
         }

@@ -15,7 +15,7 @@
         }
         def changeMark [letter: string] {
             match $letter {
-                "" => { text: " ", color: $REPORT_COLOR.reset }
+                "" => { text: " ", color: $REPORT_COLOR.yellow }
                 "A" => { text: "+", color: $REPORT_COLOR.green }
                 "D" => { text: "-", color: $REPORT_COLOR.red }
                 "M" => { text: "~", color: $REPORT_COLOR.yellow }
@@ -48,66 +48,77 @@
                 printFileLine $REPORT_INDENT.item $file.letter $file.path $file.date --dark
             }
         }
-        # one row per file: status from --name-status, +added/-deleted lines from --numstat (same order; "-" for binary)
-        def printCommitFiles [repo: string, hash: string] {
+        # one row per file: status from --name-status, +added/-deleted lines from --numstat (same order; "-" for binary);
+        # --mtime adds the worktree modification time (local commits only, fetched files carry the pull time)
+        def printCommitFiles [repo: string, hash: string, --mtime, --gap] {
             let rows = (gitSafe $repo diff-tree --no-commit-id -r --name-status -M -C --root $hash | complete | get stdout | lines)
             let stats = (gitSafe $repo diff-tree --no-commit-id -r --numstat -M -C --root $hash | complete | get stdout | lines)
+            if $gap and ($rows | is-not-empty) { print "" }
             for entry in ($rows | enumerate) {
                 let parts = ($entry.item | split row (char tab))
                 let letter = ($parts | first | str substring 0..0)
-                let path = if $letter in [ "R" "C" ] { $"($parts | get 1) -> ($parts | get 2)" } else { $parts | get 1 }
+                let newPath = ($parts | last)
+                let path = if $letter in [ "R" "C" ] { $"($parts | get 1) -> ($newPath)" } else { $newPath }
                 let stat = ($stats | get -o $entry.index | default "" | split row (char tab))
                 let counts = if $letter == "T" or ($stat | length) < 2 or $stat.0 == "-" { "" } else {
                     $" ($REPORT_COLOR.white)\(($REPORT_COLOR.green)+($stat.0)($REPORT_COLOR.white) ($REPORT_COLOR.red)-($stat.1)($REPORT_COLOR.white)\)($REPORT_COLOR.reset)"
                 }
-                printFileLine $REPORT_INDENT.detail $letter $"($path)($counts)" ""
+                # no mtime for files absent from the worktree (other branch), "?" only for deletions
+                let date = if $mtime { (fileRecord $repo $letter $newPath).date } else { "" }
+                let date = if $date == "?" and $letter != "D" { "" } else { $date }
+                printFileLine $REPORT_INDENT.detail $letter $"($path)($counts)" $date
             }
         }
-        def printHistoryCommit [repo: string, letter: string, commit: record, --quiet] {
+        # flake.lock input changes go first, then a blank line and the files
+        def printCommitDetails [repo: string, hash: string, --mtime] {
+            let changes = (commitFlakeInputs $repo $hash).changes
+            printInputChanges $changes $REPORT_INDENT.detail
+            printCommitFiles $repo $hash --mtime=$mtime --gap=($changes | is-not-empty)
+        }
+        def printHistoryCommit [repo: string, letter: string, commit: record, --mtime] {
             let mark = (changeMark $letter)
             let hash = ($commit.hash | str substring 0..7)
             print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($hash)($REPORT_COLOR.reset) ($mark.color)($commit.subject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($commit.date)($REPORT_COLOR.reset)"
-            printCommitFiles $repo $commit.hash
-            let inputs = (commitFlakeInputs $repo $commit.hash)
-            if $inputs.touched { printInputChanges $repo $inputs.changes $REPORT_INDENT.detail --quiet=$quiet }
+            printCommitDetails $repo $commit.hash --mtime=$mtime
         }
-        def printRewrittenCommit [repo: string, letter: string, event: record, --quiet] {
+        # renamed (R) or only rehashed (no mark, yellow) commit; the tree is unchanged, so only the lock changes are listed
+        def printRewrittenCommit [repo: string, letter: string, event: record] {
             let mark = (changeMark $letter)
             let oldHash = ($event.oldHash | str substring 0..7)
             let newHash = ($event.newHash | str substring 0..7)
             print $"($REPORT_INDENT.item)($mark.color)($mark.text)  ($REPORT_COLOR.magenta)($oldHash)($REPORT_COLOR.reset) ($mark.color)($event.oldSubject) -> ($REPORT_COLOR.magenta)($newHash)($REPORT_COLOR.reset) ($mark.color)($event.newSubject)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($event.date)($REPORT_COLOR.reset)"
-            let inputs = (commitFlakeInputs $repo $event.newHash)
-            if $inputs.touched { printInputChanges $repo $inputs.changes $REPORT_INDENT.detail --quiet=$quiet }
+            printInputChanges (commitFlakeInputs $repo $event.newHash).changes $REPORT_INDENT.detail
         }
-        def printRemoteDiff [repo: string, diff: record, --quiet] {
+        def printRemoteDiff [repo: string, diff: record] {
             let events = ($diff.events? | default [])
             if ($events | is-empty) { return }
             printSectionHeading "remote"
             for event in $events {
                 if $event.kind == "added" {
-                    printHistoryCommit $repo "A" $event.commit --quiet=$quiet
+                    printHistoryCommit $repo "A" $event.commit
                 } else if $event.kind == "renamed" {
-                    printRewrittenCommit $repo "R" $event --quiet=$quiet
+                    printRewrittenCommit $repo "R" $event
                 } else if $event.kind == "rehashed" {
-                    printRewrittenCommit $repo "" $event --quiet=$quiet
+                    printRewrittenCommit $repo "" $event
                 }
             }
         }
-        def printLocalDiff [repo: string, files: list<record>, commits: list<record>, --quiet] {
+        def printLocalDiff [repo: string, files: list<record>, commits: list<record>] {
             if ($files | is-empty) and ($commits | is-empty) { return }
             printSectionHeading "local"
             printLocalFiles $files
             for commit in $commits {
-                printHistoryCommit $repo "A" $commit --quiet=$quiet
+                printHistoryCommit $repo "A" $commit --mtime
             }
         }
-        def printCatastrophe [repo: string, diff: record, --quiet] {
-            print -e $"($REPORT_INDENT.item)($REPORT_COLOR.redBold)CATASTROPHE: ($diff.deleted | length) commits deleted, branch skipped($REPORT_COLOR.reset)"
+        def printCatastrophe [repo: string, diff: record] {
+            let reason = if ($diff.reason? | default "") == "narHash" { "narHash changed for the same rev" } else { $"($diff.deleted | length) commits deleted" }
+            print -e $"($REPORT_INDENT.item)($REPORT_COLOR.redBold)CATASTROPHE: ($reason), branch skipped($REPORT_COLOR.reset)"
             for commit in $diff.deleted {
-                printHistoryCommit $repo "D" $commit --quiet=$quiet
+                printHistoryCommit $repo "D" $commit
             }
             for commit in $diff.added {
-                printHistoryCommit $repo "A" $commit --quiet=$quiet
+                printHistoryCommit $repo "A" $commit
             }
         }
         def catastropheMarkerPathAt [root: string, repo: string, branch: string] {
@@ -131,8 +142,8 @@
                 }
             }
             printSectionHeading "remote"
-            printCatastrophe $repo $result.diff --quiet
-            printLocalDiff $repo ($result.localFiles? | default []) [] --quiet
+            printCatastrophe $repo $result.diff
+            printLocalDiff $repo ($result.localFiles? | default []) []
             mkdir ($marker | path dirname)
             $result.candidate | save --force $marker
         }
@@ -160,20 +171,20 @@
                 let direction = $result.direction? | default "remote"
                 if $direction == "remote" {
                     printSectionHeading "remote"
-                    printCatastrophe $repo $result.diff --quiet=$quiet
-                    printLocalDiff $repo ($result.localFiles? | default []) [] --quiet=$quiet
+                    printCatastrophe $repo $result.diff
+                    printLocalDiff $repo ($result.localFiles? | default []) []
                 } else {
                     let remoteDiff = $result.remoteDiff? | default null
                     if $remoteDiff != null and not $remoteDiff.kept {
                         printSectionHeading "remote"
-                        for commit in $remoteDiff.deleted { printHistoryCommit $repo "D" $commit --quiet=$quiet }
-                        for commit in $remoteDiff.added { printHistoryCommit $repo "A" $commit --quiet=$quiet }
+                        for commit in $remoteDiff.deleted { printHistoryCommit $repo "D" $commit }
+                        for commit in $remoteDiff.added { printHistoryCommit $repo "A" $commit }
                     } else {
-                        printRemoteDiff $repo ($remoteDiff | default { events: [] }) --quiet=$quiet
+                        printRemoteDiff $repo ($remoteDiff | default { events: [] })
                     }
-                    printLocalDiff $repo ($result.localFiles? | default []) [] --quiet=$quiet
+                    printLocalDiff $repo ($result.localFiles? | default []) []
                     if ($result.localFiles? | default [] | is-empty) { printSectionHeading "local" }
-                    printCatastrophe $repo $result.diff --quiet=$quiet
+                    printCatastrophe $repo $result.diff
                 }
                 return true
             }
@@ -202,12 +213,12 @@
             printBranchHeading $branch
             if $result.state == "rewritten" {
                 printSectionHeading "remote"
-                for commit in $diff.deleted { printHistoryCommit $repo "D" $commit --quiet=$quiet }
-                for commit in $diff.added { printHistoryCommit $repo "A" $commit --quiet=$quiet }
+                for commit in $diff.deleted { printHistoryCommit $repo "D" $commit }
+                for commit in $diff.added { printHistoryCommit $repo "A" $commit }
             } else if $remoteChanged {
-                printRemoteDiff $repo ($diff | default { events: [] }) --quiet=$quiet
+                printRemoteDiff $repo ($diff | default { events: [] })
             }
-            printLocalDiff $repo $localFiles $pushed --quiet=$quiet
+            printLocalDiff $repo $localFiles $pushed
             true
         }
         def printRepoResults [repo: string, results: list<record>, --quiet] {
