@@ -35,7 +35,7 @@
         def historyDiff [repo: string, accepted: string, candidate: string] {
             if (gitSafe $repo merge-base --is-ancestor $accepted $candidate | complete | get exit_code) == 0 {
                 let added = (commitRecords (historyRange $repo $"($accepted)..($candidate)"))
-                return { kept: true, deleted: [], added: $added, events: ($added | each { |commit| { kind: "added", commit: $commit } }) }
+                return (historyResult $repo true [] $added ($added | each { |commit| { kind: "added", commit: $commit } }))
             }
 
             let mergeBase = (gitSafe $repo merge-base $accepted $candidate | complete)
@@ -71,7 +71,15 @@
             } else {
                 []
             }
-            { kept: $kept, deleted: $deleted, added: $added, events: $events }
+            historyResult $repo $kept $deleted $added $events
+        }
+        # a lock entry with the same rev but another narHash can't come from an honest update: treated like deleted history
+        def lockTampered [repo: string, commits: list<record>] {
+            $commits | any { |commit| (commitFlakeInputs $repo $commit.hash).changes | any { |change| $change.kind == "narHash" } }
+        }
+        def historyResult [repo: string, kept: bool, deleted: list<record>, added: list<record>, events: list<record>] {
+            if $kept and (lockTampered $repo $added) { return { kept: false, reason: "narHash", deleted: [], added: $added, events: [] } }
+            { kept: $kept, reason: (if $kept { "" } else { "history" }), deleted: $deleted, added: $added, events: $events }
         }
         # Confirm before accepting a rewritten history.
         def confirmRewrite [repo: string, accepted: string, candidate: string] {
