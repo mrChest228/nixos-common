@@ -1,4 +1,5 @@
-{ lib }:
+# common.myPkgs: overlay from a pkgs directory; `_` keeps the scanner from picking this file up as a package
+{ lib, vars, com, cur }:
 let
     visible = name: !lib.hasPrefix "_" name && !lib.hasPrefix "." name;
     entriesOf = directory: lib.filterAttrs (name: _: visible name) (builtins.readDir directory);
@@ -24,11 +25,9 @@ let
             conflicts = builtins.attrNames (builtins.intersectAttrs dirs files);
         in if conflicts != [] then throw "${toString directory}: package/group name collision: ${lib.concatStringsSep ", " conflicts}"
         else files // dirs;
-in {
-    # Overlay from a pkgs directory: <name>.nix or <name>/package.nix is a package called with
-    # { lib, pkgs (= final), vars, com, cur }; directories without package.nix are recursive groups.
-    # _ and . names are skipped at every level; packages replace prior values, groups merge into attrsets.
-    myPkgs = { vars, com, cur }: dir: final: prev:
-        if !builtins.pathExists dir then {}
-        else scan { inherit vars com cur; lib = final.lib; pkgs = final; } dir prev;
-}
+    packageArgs = final: { inherit vars com cur; lib = final.lib; pkgs = final; };
+in
+# <name>.nix or <name>/package.nix is a package called with { lib, pkgs (= final), vars, com, cur }; directories
+# without package.nix are recursive groups. _ and . names are skipped at every level; packages replace prior
+# values, groups merge into attrsets.
+dir: final: prev: if !builtins.pathExists dir then {} else scan (packageArgs final) dir prev
