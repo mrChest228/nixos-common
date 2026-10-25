@@ -7,7 +7,7 @@
 #   clean
 { lib, pkgs, vars, com, cur }:
 let
-    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
 in pkgs.writeScriptBin "clean" ''
     #!${pkgs.nushell}/bin/nu -n
     $env.PATH = ${scripts.binPathNuList}

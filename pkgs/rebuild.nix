@@ -7,7 +7,7 @@
 #   rebuild "niri: blur"
 { lib, pkgs, vars, com, cur }:
 let
-    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
 in (scripts.mkRootFlockCommand "rebuild" ''
         ${scripts.nuSwitch}
         def main [message?: string, --no-add(-n)] {
