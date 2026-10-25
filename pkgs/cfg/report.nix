@@ -17,19 +17,16 @@
             if (unicodeOutput) { $REPORT_COLOR.orangeBold } else { $REPORT_COLOR.yellowBold }
         }
         def changeMark [letter: string] {
-            {
-                text: $letter
-                color: (match $letter {
-                    "A" => $REPORT_COLOR.green
-                    "M" => $REPORT_COLOR.yellow
-                    "D" => $REPORT_COLOR.red
-                    "R" => $REPORT_COLOR.cyan
-                    "C" => $REPORT_COLOR.magenta
-                    "T" => $REPORT_COLOR.blue
-                    "U" => $REPORT_COLOR.red
-                    "?" => $REPORT_COLOR.darkGray
-                    _ => $REPORT_COLOR.darkGray
-                })
+            match $letter {
+                "A" => { text: "+", color: $REPORT_COLOR.green }
+                "D" => { text: "-", color: $REPORT_COLOR.red }
+                "M" => { text: "~", color: $REPORT_COLOR.yellow }
+                "R" => { text: ">", color: $REPORT_COLOR.cyan }
+                "C" => { text: "=", color: $REPORT_COLOR.magenta }
+                "T" => { text: "T", color: $REPORT_COLOR.blue }
+                "U" => { text: "!", color: $REPORT_COLOR.red }
+                "?" => { text: ".", color: $REPORT_COLOR.darkGray }
+                _ => { text: $letter, color: $REPORT_COLOR.blue }
             }
         }
         def printBranchHeading [branch: string] {
