@@ -130,7 +130,7 @@
                     let mark = if $change.kind == "updated" { "M" } else { "v" }
                     print $"($indent)($color)($mark)  ($path)  ($oldRev) -> ($newRev)  ($REPORT_COLOR.darkGray)($change.old.date) -> ($change.item.date)($REPORT_COLOR.reset)"
                 } else if $change.kind == "source" {
-                    let color = (sourceChangeColor)
+                    let color = $REPORT_COLOR.yellowBold
                     let oldSource = if $change.old.follows != $change.item.follows {
                         $"follows: (if ($change.old.follows | is-empty) { "none" } else { $change.old.follows })"
                     } else { $change.old.original }
