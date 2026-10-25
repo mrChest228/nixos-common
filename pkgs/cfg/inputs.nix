@@ -105,10 +105,10 @@
             { touched: ($beforeText != $afterText), changes: (compareFlakeInputs $before $after) }
         }
         def shortRev [rev: string] { if ($rev | is-empty) { "" } else { $rev | str substring 0..7 } }
+        # `<rev> <date> -> <rev> <date>`, dates gray right after their rev
         def revChange [old: record, new: record, color: string, --bold] {
-            let revs = (arrows $"(shortRev $old.rev) -> (shortRev $new.rev)" $color --bold=$bold)
-            let dates = (arrows $"($old.date) -> ($new.date)" $REPORT_COLOR.darkGray --bold=$bold)
-            $"($revs)  ($REPORT_COLOR.darkGray)($dates)"
+            let gray = $REPORT_COLOR.darkGray
+            $"(shortRev $old.rev) ($gray)($old.date)($REPORT_COLOR.reset)($color)(arrows " -> " $color --bold=$bold)(shortRev $new.rev) ($gray)($new.date)($REPORT_COLOR.reset)($color)"
         }
         # Lock changes of one commit at the indent of its files: one bold row per root input, every change
         # inside it below in thin dark yellow (`name = target` for follows, `name  old -> new` for own inputs).
@@ -121,7 +121,7 @@
                 if $own == null {
                     print $"($indent)($REPORT_COLOR.yellowBold)~  ($root)($REPORT_COLOR.reset)"
                 } else if $own.kind == "added" {
-                    print $"($indent)($REPORT_COLOR.greenBold)+  ($root)  ($own.item.original)  (shortRev $own.item.rev)($REPORT_COLOR.reset)  ($REPORT_COLOR.darkGray)($own.item.date)($REPORT_COLOR.reset)"
+                    print $"($indent)($REPORT_COLOR.greenBold)+  ($root)  ($own.item.original)  (shortRev $own.item.rev) ($REPORT_COLOR.darkGray)($own.item.date)($REPORT_COLOR.reset)"
                 } else if $own.kind == "removed" {
                     print $"($indent)($REPORT_COLOR.redBold)-  ($root)($REPORT_COLOR.reset)"
                     continue
@@ -146,7 +146,7 @@
                     } else if $change.kind == "removed" {
                         "removed"
                     } else if $change.kind == "added" {
-                        if ($follows | is-empty) { $"($change.item.original)  (shortRev $change.item.rev)" } else { "" }
+                        if ($follows | is-empty) { $"($change.item.original)  (shortRev $change.item.rev) ($REPORT_COLOR.darkGray)($change.item.date)($REPORT_COLOR.reset)($color)" } else { "" }
                     } else if $change.kind == "source" {
                         if $urlChanged { arrows $"($change.old.original) -> ($change.item.original)" $color --bold } else { $"\(was (if ($change.old.follows | is-empty) { $change.old.original } else { $change.old.follows })\)" }
                     } else if $change.kind == "narHash" {
