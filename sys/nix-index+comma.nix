@@ -1,6 +1,3 @@
-{ config, lib, pkgs, vars, com, cur, ... }: {
-    nixpkgs.overlays = [(final: prev: {
-        comma = prev.comma.override { nix = config.nix.package; }; # Prevent warning "unknown settings 'eval-cores' and 'lazy-trees'" from determinate nix config
-    })];
-    programs.nix-index-database.comma.enable = true;
+{ ... }: {
+    programs.nix-index-database.comma.enable = true; # comma itself is built in the host flake (nix override there)
 }

@@ -1,5 +1,5 @@
-# What every host adds to its lib and pkgs, imported by path: `import (common.path + /overlays.nix) { vars; com; cur; }`.
-# Returns two overlays; the host puts `lib` into `pkgs.lib.extend` and `pkgs` into `appendOverlays`.
+# My own additions to lib and pkgs, the same on every host, imported by path: `import (common.path + /custom.nix) { vars; com; cur; }`.
+# Returns two overlays; the host puts `lib` into `pkgs.lib.extend` and `pkgs` into its nixpkgs overlays.
 { vars, com, cur }:
 let
     hidden = name: builtins.substring 0 1 name == "_" || builtins.substring 0 1 name == ".";
