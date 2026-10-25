@@ -1,9 +1,4 @@
 { config, lib, pkgs, vars, ... }: {
-    environment.systemPackages = [ pkgs.cfg ];
-    security.sudo.extraRules = [{
-        groups = [ "wheel" ];
-        commands = [{ command = "${pkgs.cfg}/bin/cfg"; options = [ "NOPASSWD" ]; }];
-    }];
     systemd = {
         services = {
             cfg-perms = {
@@ -15,7 +10,7 @@
                 };
             };
             cfg-sync = {
-                description = "Pull and push the config repos";
+                description = "Sync the config repos";
                 serviceConfig = {
                     Type = "oneshot";
                     # --quiet: every local branch, markers instead of repeated catastrophe reports and no
@@ -43,14 +38,18 @@
             };
         };
     };
-    # NetworkManager fires this on every "up" (boot, wifi, ethernet, usb); the service then pulls and pushes
+    # NetworkManager reports overall connectivity (not one interface): FULL starts the timer and syncs at once,
+    # NONE stops the timer so nothing is tried without a network
     networking.networkmanager.dispatcherScripts = lib.mkIf config.networking.networkmanager.enable [{
         type = "basic";
         source = pkgs.writeScript "cfg-sync-dispatcher" ''
             #!${pkgs.nushell}/bin/nu -n
             def main [interface: string, action: string] {
-                if $action == "up" {
-                    ^/run/current-system/sw/bin/systemctl start --no-block cfg-sync.service
+                if $action != "connectivity-change" { return }
+                match ($env.CONNECTIVITY_STATE? | default "") {
+                    "FULL" => { ^/run/current-system/sw/bin/systemctl start --no-block cfg-sync.timer cfg-sync.service }
+                    "NONE" => { ^/run/current-system/sw/bin/systemctl stop cfg-sync.timer }
+                    _ => {}
                 }
             }
         '';

@@ -1,6 +1,6 @@
 # rebuild — commits pending config changes and switches to the current NixOS configuration
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
-# Installed and wired (sudo rule) by sys/config/rebuild.nix; calls cfg commit/perms and gen clean.
+# Installed by sys/config/packages.nix, sudo rule in security.nix; calls cfg commit/perms and gen clean.
 # Usage: rebuild [message?] [--no-add (-n)]
 # Examples:
 #   rebuild

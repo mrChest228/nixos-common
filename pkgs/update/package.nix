@@ -1,6 +1,6 @@
 # update — updates flake inputs and creates a bootable system generation
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
-# Installed and wired (sudo rule) by sys/config/update.nix; calls cfg commit and gen clean.
+# Installed by sys/config/packages.nix, sudo rule in security.nix; calls cfg commit and gen clean.
 # Usage: update [message?] [--no-add (-n)]
 # Examples:
 #   update

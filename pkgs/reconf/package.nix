@@ -1,6 +1,6 @@
 # reconf — commits config changes and switches the Home Manager configurations
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
-# Installed and wired (sudo rule) by sys/config/reconf.nix; calls cfg commit and gen clean.
+# Installed by sys/config/packages.nix, sudo rule in security.nix; calls cfg commit and gen clean.
 # Usage: reconf [message?] [--no-add (-n)]
 # Example:
 #   reconf

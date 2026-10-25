@@ -1,6 +1,6 @@
 # clean — cleans the Nix store and keeps recent system, HM and user-profile generations
 # Runs as root; started by a user it re-runs itself through sudo and boots the selected generation
-# Installed by sys/config/clean.nix.
+# Installed by sys/config/packages.nix.
 # Usage:
 #   clean
 # Example:

@@ -1,6 +1,6 @@
 # gen — lists, switches, deletes and cleans system, HM and user-profile generations
 # Root-only actions re-run through sudo when started by a user; gen does not take the config lock.
-# Installed by sys/config/gen.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
+# Installed by sys/config/packages.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
 # Usage:
 #   gen del [...ids]
 #   gen switch <id>

@@ -1,6 +1,6 @@
 # cfg — commits, syncs and fixes permissions of config repos in /etc/nixos (<vars.configPath>)
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
-# Installed and wired (sudo rule, cfg-sync/cfg-perms services) by sys/config/cfg.nix; cfg-sync.service runs `cfg sync --quiet`.
+# Installed by sys/config/packages.nix, sudo rule in security.nix, cfg-sync/cfg-perms units in services.nix (cfg-sync runs `cfg sync --quiet`).
 # Called by update, rebuild and reconf for commits and permissions.
 # Usage:
 #   cfg commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)] [--no-add (-n)] — commit and push changes
