@@ -31,25 +31,28 @@
             description = "Sync the config repos every 2 minutes";
             wantedBy = [ "timers.target" ];
             timerConfig = {
-                OnBootSec = "2min";
+                # the NM hook restarts the timer when a link comes up: first run 20-40 s later, not at once;
+                # `cfg sync --quiet` itself skips repos fetched less than 90 s ago
+                OnActiveSec = "20s";
                 OnUnitActiveSec = "2min";
+                RandomizedDelaySec = "20s";
                 # no WakeSystem: a suspended laptop is not woken for syncing
                 AccuracySec = "1m";
             };
         };
     };
-    # NetworkManager reports overall connectivity (not one interface): FULL starts the timer and syncs at once,
-    # NONE stops the timer so nothing is tried without a network
+    # NetworkManager link events, no connectivity checks (those poll an external URL): a link up restarts the timer,
+    # a link down stops it when no default route is left, so nothing is tried without a network
     networking.networkmanager.dispatcherScripts = lib.mkIf config.networking.networkmanager.enable [{
         type = "basic";
         source = pkgs.writeScript "cfg-sync-dispatcher" ''
             #!${pkgs.nushell}/bin/nu -n
             def main [interface: string, action: string] {
-                if $action != "connectivity-change" { return }
-                match ($env.CONNECTIVITY_STATE? | default "") {
-                    "FULL" => { ^/run/current-system/sw/bin/systemctl start --no-block cfg-sync.timer cfg-sync.service }
-                    "NONE" => { ^/run/current-system/sw/bin/systemctl stop cfg-sync.timer }
-                    _ => {}
+                if $action == "up" {
+                    ^/run/current-system/sw/bin/systemctl restart --no-block cfg-sync.timer
+                } else if $action == "down" {
+                    let routes = (^${pkgs.iproute2}/bin/ip route show default | complete | get stdout | str trim)
+                    if ($routes | is-empty) { ^/run/current-system/sw/bin/systemctl stop cfg-sync.timer }
                 }
             }
         '';
