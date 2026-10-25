@@ -66,34 +66,12 @@
                 error make { msg: $"($repo): nix flake update common failed" }
             }
         }
-        # commits selected worktree changes and returns their report rows
         def fileRecord [repo: string, letter: string, path: string, displayPath?: string] {
             let fullPath = [$repo $path] | path join
             let date = if ($fullPath | path exists) {
                 try { ls -D $fullPath | get 0 | get modified | format date '%Y-%m-%d %H:%M:%S' } catch { "?" }
             } else { "?" }
             { letter: $letter, path: ($displayPath | default $path), date: $date }
-        }
-        def stagedFiles [repo: string] {
-            let entries = (gitSafe $repo diff --cached -M -C --name-status -z | complete | get stdout | split row (char nul) | where { |entry| $entry != "" })
-            mut files = []
-            mut i = 0
-            loop {
-                if $i >= ($entries | length) { break }
-                let status = ($entries | get $i)
-                let letter = ($status | str substring 0..0)
-                $i = $i + 1
-                let firstPath = ($entries | get $i)
-                $i = $i + 1
-                if $letter in [ "R" "C" ] {
-                    let newPath = ($entries | get $i)
-                    $files = ($files | append (fileRecord $repo $letter $newPath $"($firstPath) -> ($newPath)"))
-                    $i = $i + 1
-                } else {
-                    $files = ($files | append (fileRecord $repo $letter $firstPath))
-                }
-            }
-            $files
         }
         def worktreeFiles [repo: string, --unstaged-only] {
             let entries = (gitSafe $repo status --porcelain=v1 -z | complete | get stdout | split row (char nul) | where { |entry| $entry != "" })
@@ -121,7 +99,7 @@
         }
         def commitRepo [repo: string, message: string, --no-add] {
             if not $no_add { gitSafe $repo add . }
-            let files = if $no_add { worktreeFiles $repo --unstaged-only } else { stagedFiles $repo }
+            let files = if $no_add { worktreeFiles $repo --unstaged-only } else { [] }
             let inputs = (localFlakeInputs $repo "index")
             let staged = (gitSafe $repo diff --cached --name-only | complete | get stdout)
             let committed = not ($staged | is-empty)

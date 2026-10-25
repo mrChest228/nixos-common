@@ -42,14 +42,15 @@
             let arrow = if $direction == "remote" { glyph "↓" "v" } else { glyph "↑" "^" }
             print $"($REPORT_INDENT.section)($REPORT_COLOR.section)($arrow) ($direction)($REPORT_COLOR.reset)"
         }
-        def printFileLine [indent: string, letter: string, path: string, date: string] {
+        def printFileLine [indent: string, letter: string, path: string, date: string, --dark] {
             let mark = (changeMark $letter)
+            let color = if $dark { $REPORT_COLOR.darkGray } else { $mark.color }
             let dateText = if ($date | is-empty) { "" } else { $"  ($REPORT_COLOR.darkGray)($date)($REPORT_COLOR.reset)" }
-            print $"($indent)($mark.color)($mark.text)  ($path)($REPORT_COLOR.reset)($dateText)"
+            print $"($indent)($color)($mark.text)  ($path)($REPORT_COLOR.reset)($dateText)"
         }
         def printLocalFiles [files: list<record>] {
             for file in $files {
-                printFileLine $REPORT_INDENT.item $file.letter $file.path $file.date
+                printFileLine $REPORT_INDENT.item $file.letter $file.path $file.date --dark
             }
         }
         def printCommitFiles [repo: string, hash: string] {
