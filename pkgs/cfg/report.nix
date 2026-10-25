@@ -1,7 +1,7 @@
 { pkgs, vars }:
 ''
         const REPORT_INDENT = { branch: "   ", section: "      ", item: "         ", detail: "            " }
-        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }
+        const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), darkGray: (ansi --escape '90m') }
         def unicodeOutput [] {
             let term = ($env.TERM? | default "")
             let locales = [ ($env.LC_ALL? | default "") ($env.LC_CTYPE? | default "") ($env.LANG? | default "") ]
@@ -15,10 +15,10 @@
         }
         def changeMark [letter: string] {
             match $letter {
-                "" => { text: " ", color: $REPORT_COLOR.yellowBright }
+                "" => { text: " ", color: $REPORT_COLOR.yellow }
                 "A" => { text: "+", color: $REPORT_COLOR.green }
                 "D" => { text: "-", color: $REPORT_COLOR.red }
-                "M" => { text: "~", color: $REPORT_COLOR.yellowBright }
+                "M" => { text: "~", color: $REPORT_COLOR.yellow }
                 "R" => { text: ">", color: $REPORT_COLOR.cyan }
                 "C" => { text: "=", color: $REPORT_COLOR.magenta }
                 "T" => { text: "T", color: $REPORT_COLOR.blue }
