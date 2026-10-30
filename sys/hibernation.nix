@@ -7,5 +7,4 @@
         HandleLidSwitch = "suspend-then-hibernate"; # Suspend first, then hibernate when the lid is closed
     };
     systemd.sleep.settings.Sleep.HibernateDelaySec = "30m"; # Fixed delay instead of the battery-discharge estimate
-    boot.kernelParams = [ "mem_sleep_default=deep" ];
 }
