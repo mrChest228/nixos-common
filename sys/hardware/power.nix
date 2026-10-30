@@ -16,7 +16,6 @@
                 WIFI_PWR_ON_BAT = "on";
                 SOUND_POWER_SAVE_ON_BAT = 1;
                 SOUND_POWER_SAVE_CONTROLLER = "Y";
-                PCIE_ASPM_ON_BAT = "powersave";
                 RUNTIME_PM_ON_BAT = "auto";
                 MAX_LOST_WORK_SECS_ON_BAT = 60;
                 NMI_WATCHDOG = 0;
