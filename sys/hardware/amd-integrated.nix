@@ -24,6 +24,7 @@
         kernelModules = [
             "zenpower"
             "ryzen_smu"
+            "cpuid" # amd-s2idle reads the CPU topology through it
         ];
     };
     environment.systemPackages = [ pkgs.ryzenadj ];
