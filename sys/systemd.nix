@@ -4,7 +4,7 @@
         DefaultTimeoutStartSec = "30s";
     };
     services.journald.settings.Journal = {
-        SystemMaxUse = "512M";      # Total size of /var/log/journal, the oldest files are removed first
+        SystemMaxUse = lib.mkDefault "512M"; # Total size of /var/log/journal, the oldest files are removed first. TODO: 4G on the server host
         SystemKeepFree = "1G";      # Don't grow while the root fs has less free space than this
         MaxRetentionSec = "1month";
     };
