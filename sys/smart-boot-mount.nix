@@ -1,5 +1,7 @@
 { config, lib, pkgs, vars, com, cur, ... }:
-let esp = config.boot.loader.efi.efiSysMountPoint; in {
+let
+    esp = config.boot.loader.efi.efiSysMountPoint;
+in {
     # boot.automount is based on LoaderDevicePartUUID that are given from bootloader. Systemd-boot gives this variable, but some unknown bootloader (maybe even GRUB2) doesn't give it. I hate this. This service mounts /boot only from UEFI variables
     systemd.services.smart-boot-mount = {
         description = "ESP mount based on UEFI BootCurrent/BootXXXX variables only";
@@ -17,8 +19,7 @@ let esp = config.boot.loader.efi.efiSysMountPoint; in {
         };
         unitConfig = {
             DefaultDependencies = false;
-            # Skipped (not failed) when booted without UEFI or when the ESP is already mounted
-            ConditionPathIsDirectory = "/sys/firmware/efi/efivars";
+            # Skipped (not failed) when the ESP is already mounted: nixos-rebuild restarts this unit when it changes
             ConditionPathIsMountPoint = "!${esp}";
         };
 
@@ -29,11 +30,12 @@ let esp = config.boot.loader.efi.efiSysMountPoint; in {
         ];
 
         script = ''
-            udevadm settle -t 10 # mount finds the partition by PARTUUID only after udev has probed the disks
+            [ -d /sys/firmware/efi/efivars ] || { echo "no EFI variables: not a UEFI boot"; exit 1; }
+            udevadm settle -t 5 # Returns as soon as udev has probed the disks; mount finds the partition by PARTUUID only after that
             mkdir -p ${esp}
 
             BOOT_HEX=$(od -An -t x1 -j 4 -N 2 /sys/firmware/efi/efivars/BootCurrent-8be4df61-93ca-11d2-aa0d-00e098032b8c | tr -d ' \n')
-            [ -z "$BOOT_HEX" ] && { echo "BootCurrent is empty"; exit 2; }
+            [ -z "$BOOT_HEX" ] && { echo "BootCurrent EFI variable is empty"; exit 2; }
 
             BOOT_NUM="''${BOOT_HEX:2:2}''${BOOT_HEX:0:2}" # Little Endian fixing
 
@@ -41,11 +43,11 @@ let esp = config.boot.loader.efi.efiSysMountPoint; in {
             VAR_HEX=$(od -An -v -t x1 "$BOOT_VAR" | tr -d ' \n')
 
             PART_OFFSET_STR=''${VAR_HEX#*04012a00}
-            [ "$PART_OFFSET_STR" == "$VAR_HEX" ] && { echo "$BOOT_VAR: no hard drive node in the device path"; exit 3; }
+            [ "$PART_OFFSET_STR" == "$VAR_HEX" ] && { echo "Boot$BOOT_NUM EFI variable: no hard drive node in the device path"; exit 3; }
 
             RAW_UUID=''${PART_OFFSET_STR:40:32}
             echo "RAW_UUID: $RAW_UUID"
-            [ ''${#RAW_UUID} -ne 32 ] && { echo "partition signature is too short"; exit 4; }
+            [ ''${#RAW_UUID} -ne 32 ] && { echo "Boot$BOOT_NUM EFI variable: partition signature is too short"; exit 4; }
 
             # Little Endian fixing
             ESP_UUID="''${RAW_UUID:6:2}''${RAW_UUID:4:2}''${RAW_UUID:2:2}''${RAW_UUID:0:2}-''${RAW_UUID:10:2}''${RAW_UUID:8:2}-''${RAW_UUID:14:2}''${RAW_UUID:12:2}-''${RAW_UUID:16:4}-''${RAW_UUID:20:12}"
