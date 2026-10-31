@@ -24,7 +24,7 @@
         kernelModules = [
             "zenpower"
             "ryzen_smu"
-            "cpuid" # amd-s2idle reads the CPU topology through it
+            "cpuid" # Only for amd-s2idle (read-only /dev/cpu/*/cpuid, root). TODO: drop it when the sleep debugging is over
         ];
     };
     environment.systemPackages = [ pkgs.ryzenadj ];
