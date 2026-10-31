@@ -45,8 +45,10 @@
                         "1.1.1.1#cloudflare-dns.com"
                         "2620:fe::10#dns.quad9.net" # Quad9 without the malware filter (the filtered one is ::fe / 9.9.9.9)
                         "9.9.9.10#dns.quad9.net"
-                        "2001:4860:4860::8888#dns.google"
-                        "8.8.8.8#dns.google"
+                        # Control D (Canada, no logs, no filter). TODO: at the first chance measure it from the laptop against the other
+                        # two: `kdig +tls @76.76.2.11 example.com` vs `@9.9.9.10` / `@1.1.1.1` (query time); drop it if far slower
+                        "2606:1a40::11#p0.freedns.controld.com"
+                        "76.76.2.11#p0.freedns.controld.com"
                     ];
                 }
             ] ++ lib.optional config.services.tailscale.enable {
