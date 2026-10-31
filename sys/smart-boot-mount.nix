@@ -26,10 +26,8 @@ in {
         ];
 
         script = ''
-            if mountpoint -q ${esp}; then
-                [ -e /run/smart-boot-mount ] && exit 0 # Mounted by an earlier run of this unit
-                echo "${esp} is already mounted by someone else"; exit 1
-            fi
+            # The unit runs once per boot (restartIfChanged = false), so a mounted ESP here is always somebody else's
+            mountpoint -q ${esp} && { echo "${esp} is already mounted"; exit 1; }
             [ -d /sys/firmware/efi/efivars ] || { echo "no EFI variables: not a UEFI boot"; exit 2; }
             mkdir -p ${esp}
 
@@ -54,7 +52,6 @@ in {
 
             # vfat partitions only. Patch the string for other types
             mount -t vfat -o dmask=0077,fmask=0177 PARTUUID="$ESP_UUID" ${esp} || { echo "mount of PARTUUID=$ESP_UUID failed"; exit 6; }
-            touch /run/smart-boot-mount # /run: runtime state of services, tmpfs, empty after every boot
         '';
     };
 }
