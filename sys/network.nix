@@ -35,7 +35,7 @@
                 hide-version = true;
             };
             # Every query goes to these over TLS (port 853), the name after # is checked against the certificate.
-            # unbound picks the fastest of them by measured latency, not by list order
+            # unbound picks one at random among those whose measured latency is close to the best, not by list order
             forward-zone = [
                 {
                     name = ".";
@@ -43,10 +43,10 @@
                     forward-addr = [
                         "2606:4700:4700::1111#cloudflare-dns.com"
                         "1.1.1.1#cloudflare-dns.com"
+                        "2620:fe::10#dns.quad9.net" # Quad9 without the malware filter (the filtered one is ::fe / 9.9.9.9)
+                        "9.9.9.10#dns.quad9.net"
                         "2001:4860:4860::8888#dns.google"
                         "8.8.8.8#dns.google"
-                        "2606:4700:4700::1001#cloudflare-dns.com"
-                        "1.0.0.1#cloudflare-dns.com"
                     ];
                 }
             ] ++ lib.optional config.services.tailscale.enable {
