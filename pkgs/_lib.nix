@@ -1,5 +1,4 @@
-{ lib, pkgs, vars, com }:
-rec {
+{ lib, pkgs, vars, com }: rec {
     # nushell list literal of the users whose Home Manager these scripts switch and whose hm/<user> dirs they check
     hmUsersNuList = "[ ${lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users} ]";
     # PATH for root scripts as a nushell list literal. sudo keeps the caller's PATH on NixOS, so the impl
