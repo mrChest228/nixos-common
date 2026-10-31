@@ -10,7 +10,7 @@ in {
         after    = [ "local-fs-pre.target" ];
 
         # Before all the root dirs mount target
-        before   = [ "local-fs.target" ];
+        before   = [ "local-fs.target" "boot.mount" "boot.automount" ];
         wantedBy = [ "local-fs.target" ];
 
         serviceConfig = {
@@ -23,7 +23,6 @@ in {
         path = with pkgs; [
             coreutils
             util-linux
-            config.systemd.package # udevadm
         ];
 
         script = ''
@@ -32,7 +31,6 @@ in {
                 echo "${esp} is already mounted by someone else"; exit 1
             fi
             [ -d /sys/firmware/efi/efivars ] || { echo "no EFI variables: not a UEFI boot"; exit 2; }
-            udevadm settle -t 5 # Returns as soon as udev has probed the disks; mount finds the partition by PARTUUID only after that
             mkdir -p ${esp}
 
             BOOT_HEX=$(od -An -t x1 -j 4 -N 2 /sys/firmware/efi/efivars/BootCurrent-8be4df61-93ca-11d2-aa0d-00e098032b8c | tr -d ' \n')
@@ -55,8 +53,8 @@ in {
             echo "ESP_UUID: $ESP_UUID"
 
             # vfat partitions only. Patch the string for other types
-            mount -t vfat -o dmask=0077,fmask=0177 PARTUUID="$ESP_UUID" ${esp}
-            touch /run/smart-boot-mount
+            mount -t vfat -o dmask=0077,fmask=0177 PARTUUID="$ESP_UUID" ${esp} || { echo "mount of PARTUUID=$ESP_UUID failed"; exit 6; }
+            touch /run/smart-boot-mount # /run: runtime state of services, tmpfs, empty after every boot
         '';
     };
 }
