@@ -5,9 +5,9 @@
 # Examples:
 #   update
 #   update "refresh inputs"
-{ lib, pkgs, vars }:
+{ lib, pkgs, vars, com, cur }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
 in (scripts.mkRootFlockCommand "update" ''
         ${scripts.nuSwitch}
         def main [message?: string, --no-add(-n)] {

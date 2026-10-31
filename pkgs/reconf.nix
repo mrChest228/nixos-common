@@ -4,9 +4,9 @@
 # Usage: reconf [message?] [--no-add (-n)]
 # Example:
 #   reconf
-{ lib, pkgs, vars }:
+{ lib, pkgs, vars, com, cur }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
 in (scripts.mkRootFlockCommand "reconf" ''
         ${scripts.nuSwitch}
         def main [message?: string, --no-add(-n)] {

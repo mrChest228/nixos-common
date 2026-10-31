@@ -1,4 +1,4 @@
-{ lib, pkgs, vars }:
+{ lib, pkgs, vars, com }:
 rec {
     # nushell list literal of the users whose Home Manager these scripts switch and whose hm/<user> dirs they check
     hmUsersNuList = "[ ${lib.concatMapStringsSep " " (u: "\"${u}\"") vars.users} ]";
@@ -19,7 +19,7 @@ rec {
         impl = pkgs.writeScript "${name}-impl" ''
             #!${pkgs.nushell}/bin/nu -n
             $env.PATH = ${binPathNuList}
-            use ${../sys/my-std.nu} *
+            use ${com + /sys/my-std.nu} *
             ${text}
         '';
         command = pkgs.writeScriptBin name ''

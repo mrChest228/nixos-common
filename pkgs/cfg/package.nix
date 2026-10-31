@@ -14,9 +14,9 @@
 #   cfg rename "niri: blur" -1   # rename the commit before the last one
 #   cfg sync --host cur
 #   cfg sync --branch server   # that branch in every repo that has it, no checkout
-{ lib, pkgs, vars }:
+{ lib, pkgs, vars, com, cur }:
 let
-    scripts = import ../_lib.nix { inherit lib pkgs vars; };
+    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
     subcommands = lib.concatStringsSep "\n" [
         (import ./commit.nix { inherit vars; })
         (import ./rename.nix { inherit vars; })

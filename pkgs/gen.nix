@@ -10,9 +10,9 @@
 # Examples:
 #   gen list
 #   gen clean
-{ lib, pkgs, vars }:
+{ lib, pkgs, vars, com, cur }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
 in pkgs.writeScriptBin "gen" ''
     #!${pkgs.nushell}/bin/nu -n
     $env.PATH = ${scripts.binPathNuList}
