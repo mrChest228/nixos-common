@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }:
+{ config, lib, pkgs, vars, com, cur, ... }:
 {
     hardware = {
         amdgpu.initrd.enable = true;
@@ -24,6 +24,7 @@
         kernelModules = [
             "zenpower"
             "ryzen_smu"
+            "cpuid" # Only for amd-s2idle (read-only /dev/cpu/*/cpuid, root). TODO: drop it when the sleep debugging is over
         ];
     };
     environment.systemPackages = [ pkgs.ryzenadj ];

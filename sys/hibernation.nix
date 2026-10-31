@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     powerManagement.enable = true;
     # Hibernate after 30 min with lid closed
     services.logind.settings.Login = {
@@ -6,13 +6,5 @@
         HandlePowerKeyLongPress = "poweroff";
         HandleLidSwitch = "suspend-then-hibernate"; # Suspend first, then hibernate when the lid is closed
     };
-    # Define extra configs for hibernation
-    # TODO
-    # systemd.sleep.extraConfig = '' 
-    #     HibernateMode=shutdown
-    #     HibernateDelaySec=30m
-    #     HibernateState=disk
-    #     SuspendState=mem
-    # '';
-    boot.kernelParams = [ "mem_sleep_default=deep" ];
+    systemd.sleep.settings.Sleep.HibernateDelaySec = "30m"; # Fixed delay instead of the battery-discharge estimate
 }

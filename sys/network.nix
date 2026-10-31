@@ -1,19 +1,10 @@
-{ config, lib, com, pkgs, vars, self, ... }:
+{ config, lib, pkgs, vars, com, cur, ... }:
 {
     networking = {
         #TODO: hosts with My server (if the Internet or electricy will be disabled (for local network))
-        nameservers = [
-            "1.1.1.1#cloudflare-dns.com"
-            "2606:4700:4700::1111#cloudflare-dns.com"
-            "8.8.8.8#dns.google"
-            "2001:4860:4860::8888#dns.google"
-            "1.0.0.1#cloudflare-dns.com"
-            "2606:4700:4700::1001#cloudflare-dns.com"
-        ];
         networkmanager = {
             enable = true;
-            dns = lib.mkForce "none"; # Don't use default dns from my router. Only my own dns
-            settings.main.systemd-resolved = false;
+            dns = lib.mkForce "none"; # Don't use default dns from my router. Only my own dns (unbound below)
             connectionConfig = {
                 "ipv6.ip6-privacy" = 2;        # Use random-generated IP-adresses (static IP continue working)
             };
@@ -22,15 +13,46 @@
         dhcpcd.enable = false;
         resolvconf.enable = false;
     };
-    services.resolved = {
+    # Everybody asks the local unbound. Nobody else writes this file: resolved and resolvconf are off,
+    # NetworkManager runs with rc-manager=unmanaged
+    environment.etc."resolv.conf".text = ''
+        nameserver ::1
+        nameserver 127.0.0.1
+        options edns0 trust-ad
+    '';
+    services.unbound = {
         enable = true;
-        settings.Resolve = {
-            DNSOverTLS = true;
-            Domains = [ "~." ];
-            FallbackDNS = []; # Don't use uncrypted DNS
-            LLMNR = false;    # An old protocol
-            DNSSEC = false;   # Cloudflare and google already check the sertificates. Saves time
-            MulticastDNS = true;
+        resolveLocalQueries = false; # Would turn resolvconf back on; resolv.conf is written above instead
+        # DNSSEC is on: the module keeps the root trust anchor (auto-trust-anchor-file), unbound validates every answer itself
+        settings = {
+            server = {
+                qname-minimisation = true; # Upstream sees only the labels it needs
+                aggressive-nsec = true;    # Answer "no such name" from DNSSEC proofs already in cache
+                prefetch = true;           # Refresh popular records before they expire
+                serve-expired = true;      # Answer from cache while the network is down
+                serve-expired-ttl = 86400;
+                hide-identity = true;
+                hide-version = true;
+            };
+            # Every query goes to these over TLS (port 853), the name after # is checked against the certificate.
+            # unbound picks one at random among those whose measured latency is close to the best, not by list order
+            forward-zone = [
+                {
+                    name = ".";
+                    forward-tls-upstream = true;
+                    forward-addr = [
+                        "2606:4700:4700::1111#cloudflare-dns.com"
+                        "1.1.1.1#cloudflare-dns.com"
+                        "2620:fe::10#dns.quad9.net" # Quad9 without the malware filter (the filtered one is ::fe / 9.9.9.9)
+                        "9.9.9.10#dns.quad9.net"
+                        "2001:4860:4860::8888#dns.google"
+                        "8.8.8.8#dns.google"
+                    ];
+                }
+            ] ++ lib.optional config.services.tailscale.enable {
+                name = "ts.net."; # MagicDNS names (server.<tailnet>.ts.net) are answered by the running tailscaled
+                forward-addr = [ "100.100.100.100" ];
+            };
         };
     };
     boot.kernel.sysctl = {
