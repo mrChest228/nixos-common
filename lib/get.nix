@@ -9,14 +9,13 @@
         else if lib.hasSuffix ".nix" name then [ path ]
         else []
     ) (lib.attrNames ls);
-in {
+in
     # imports = get [ ... ]: file -> itself, dir -> its top-level .nix files, dir/... -> every .nix below it.
     # Names starting with _ or . are never picked up (a dir named explicitly is still read, only its _/. children are
-    # skipped), so _config.nix / _home.nix stay entry points only.
-    get = lib.concatMap (p:
+    # skipped), so _config.nix / _home.nix stay entry points only
+    lib.concatMap (p:
         if !lib.isPath p then throw "get: expected a path, got ${builtins.typeOf p}"
         else if baseNameOf p == "..." then nixFiles true (dirOf p)
         else if builtins.readFileType p == "directory" then nixFiles false p
         else [ p ]
-    );
-}
+    )
