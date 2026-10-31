@@ -1,58 +1,40 @@
-# My own additions to lib and pkgs, the same on every host, imported by path:
-#   custom = import (common.path + /custom.nix) { lib = nixpkgs.lib; inherit vars; com = common.path; cur = ./.; };
-# Returns two overlays (final: prev: { … }); the host puts `lib` into `pkgs.lib.extend` and `pkgs` into its overlays.
-# The `lib` argument is the plain nixpkgs lib and is used only to walk directories: the attribute names of an overlay
-# must not depend on `final` (nix needs them before it can build `final`). Everything else gets `final`:
-# lib modules see the final lib, packages see the final pkgs, so they can use each other.
-{ lib, vars, com, cur }:
-let
+# My own lib modules and packages, shared by every host. `lib` is the plain nixpkgs lib and only walks directories:
+# an overlay's attribute names can't depend on `final`. Everything else gets `final`, so lib modules and packages
+# can use each other.
+#   custom = import (common.path + /custom.nix) { inherit (nixpkgs) lib; };
+#   lib.extend (final: prev: custom.mkLib (com + /lib) final)
+#   pkgs.appendOverlays [ (custom.mkPkgs pkgArgs (com + /pkgs)) (custom.mkPkgs pkgArgs (cur + /pkgs)) ]
+{ lib }: let
     visible = name: !lib.hasPrefix "_" name && !lib.hasPrefix "." name;
-    entriesOf = dir: lib.filterAttrs (name: _: visible name) (builtins.readDir dir);
-
-    # com/lib/<name>.nix are { lib }: { … }
-    libModules = builtins.attrNames (lib.filterAttrs (name: _: lib.hasSuffix ".nix" name) (entriesOf (com + /lib)));
-    libOverlay = final: prev: lib.foldl' (acc: name: acc // import (com + "/lib/${name}") { lib = final; }) {} libModules;
-
-    # A pkgs directory:
-    #   <name>.nix or <name>/package.nix — a package, called with { lib, pkgs, vars, com, cur } (lib and pkgs are final);
-    #     it replaces whatever nixpkgs had under that name (so pkgs.clean is mine, not the Clean compiler);
-    #   <name>/ without package.nix — a group: pkgs.<name>.<…>, nested as deep as needed; it is added to an existing
-    #     attrset of that name (pkgs.gnome.myTool), but must not shadow a package (an error instead).
-    # <name>.nix and <name>/ side by side is an error too.
-    myPkgs = dir: final: prev:
-        let
-            args = { inherit vars com cur; lib = final.lib; pkgs = final; };
-            scan = directory: previous:
-                let
-                    entries = entriesOf directory;
-                    files = lib.filterAttrs (name: type: (type == "regular" || type == "symlink") && lib.hasSuffix ".nix" name) entries;
-                    dirs = lib.filterAttrs (_: type: type == "directory") entries;
-
-                    packages = lib.mapAttrs' (file: _:
-                        lib.nameValuePair (lib.removeSuffix ".nix" file) (import (directory + "/${file}") args)
-                    ) files;
-                    groupsAndDirPackages = lib.mapAttrs (name: _:
-                        let
-                            path = directory + "/${name}";
-                            old = previous.${name} or {};
-                        in
-                        if builtins.pathExists (path + /package.nix) then import (path + /package.nix) args
-                        else if !builtins.isAttrs old || lib.isDerivation old then
-                            throw "${toString path}: a group can't replace the package `${name}`"
-                        else old // scan path old
-                    ) dirs;
-
-                    collisions = builtins.attrNames (builtins.intersectAttrs groupsAndDirPackages packages);
-                in
-                if collisions != [] then
-                    throw "${toString directory}: both <name>.nix and <name>/ exist for: ${lib.concatStringsSep ", " collisions}"
-                else packages // groupsAndDirPackages;
-        in
-        if builtins.pathExists dir then scan dir prev else {};
-
-    # common's packages first, then the host's on top: a host package replaces a common one, a host group extends it
-    pkgsOverlay = lib.composeExtensions (myPkgs (com + /pkgs)) (myPkgs (cur + /pkgs));
+    ls = dir: if builtins.pathExists dir then lib.filterAttrs (name: _: visible name) (builtins.readDir dir) else {};
+    isNix = name: type: type != "directory" && lib.hasSuffix ".nix" name;
 in {
-    lib = libOverlay;
-    pkgs = pkgsOverlay;
+    # dir/<name>.nix are { lib }: { … }; merged into one attrset for lib.extend
+    mkLib = dir: final:
+        lib.concatMapAttrs (name: _: import (dir + "/${name}") { lib = final; }) (lib.filterAttrs isNix (ls dir));
+
+    # dir/<name>.nix or dir/<name>/package.nix is a package, called with args // { lib, pkgs } (both final);
+    # it replaces whatever nixpkgs had under that name (pkgs.clean is mine, not the Clean compiler).
+    # dir/<name>/ without package.nix is a group: pkgs.<name>.<…>, nested as deep as needed, added to an existing
+    # attrset of that name; a group over a package, or <name>.nix next to <name>/, is an error.
+    mkPkgs = args: dir: final: prev: let
+        pkgArgs = args // { lib = final.lib; pkgs = final; };
+        scan = directory: previous: let
+            entries = ls directory;
+            packages = lib.mapAttrs' (file: _:
+                lib.nameValuePair (lib.removeSuffix ".nix" file) (import (directory + "/${file}") pkgArgs)
+            ) (lib.filterAttrs isNix entries);
+            dirs = lib.mapAttrs (name: _: let
+                path = directory + "/${name}";
+                old = previous.${name} or {};
+            in
+                if builtins.pathExists (path + /package.nix) then import (path + /package.nix) pkgArgs
+                else if !lib.isAttrs old || lib.isDerivation old then throw "${toString path}: a group can't replace the package `${name}`"
+                else old // scan path old
+            ) (lib.filterAttrs (_: type: type == "directory") entries);
+            collisions = lib.attrNames (lib.intersectAttrs dirs packages);
+        in
+            if collisions != [] then throw "${toString directory}: both <name>.nix and <name>/ exist for: ${lib.concatStringsSep ", " collisions}"
+            else packages // dirs;
+    in scan dir prev;
 }

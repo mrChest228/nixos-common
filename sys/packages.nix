@@ -8,4 +8,5 @@
         python3   # For system scripts and tools like amd-debug-tools
     ] ++ (with pkgs.stable; [
     ]);
+    programs.nix-index-database.comma.enable = true; # comma (`, cmd`); built in the host flake with determinate's nix
 }

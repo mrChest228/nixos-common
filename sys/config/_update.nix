@@ -1,4 +1,4 @@
-# update = nix flake update + rebuild; not imported on the server, which is updated by hand
+# update = nix flake update + rebuild; `_` keeps `get (com + /sys/config)` from importing it, laptops import it by name
 { pkgs, ... }: {
     environment.systemPackages = [ pkgs.update ];
     security.sudo.extraRules = [{

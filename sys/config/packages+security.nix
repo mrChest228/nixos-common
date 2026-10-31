@@ -1,4 +1,5 @@
 { pkgs, vars, ... }: {
+    environment.systemPackages = with pkgs; [ cfg gen rebuild reconf clean ]; # update is in _update.nix (laptops only)
     # the root-only commands re-run themselves through sudo; gen and clean ask for the password
     security.sudo.extraRules = [{
         groups = [ "wheel" ];
