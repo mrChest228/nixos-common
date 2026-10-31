@@ -1,13 +1,13 @@
 # update — updates flake inputs and creates a bootable system generation
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
-# Installed and wired (sudo rule) by sys/config/update.nix; calls cfg commit and gen clean.
+# Installed and wired (sudo rule) by sys/config/_update.nix; calls cfg commit and gen clean.
 # Usage: update [message?] [--no-add (-n)]
 # Examples:
 #   update
 #   update "refresh inputs"
-{ lib, pkgs, vars, com, cur }:
+{ lib, pkgs, vars }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars; };
 in (scripts.mkRootFlockCommand "update" ''
         ${scripts.nuSwitch}
         def main [message?: string, --no-add(-n)] {

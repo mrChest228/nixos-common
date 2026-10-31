@@ -1,6 +1,6 @@
 # cfg — commits, syncs and fixes permissions of config repos in /etc/nixos (<vars.configPath>)
 # Runs as root under /run/nixos-config.lock; started by a user it re-runs itself through sudo.
-# Installed by sys/config/packages.nix, sudo rule in security.nix, cfg-sync/cfg-perms units in services.nix (cfg-sync runs `cfg sync --quiet`).
+# Installed and given a sudo rule by sys/config/packages+security.nix, cfg-sync/cfg-perms units in services.nix (cfg-sync runs `cfg sync --quiet`).
 # Called by update, rebuild and reconf for commits and permissions.
 # Usage:
 #   cfg commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)] [--no-add (-n)] — commit and push changes
@@ -14,9 +14,9 @@
 #   cfg rename "niri: blur" -1   # rename the commit before the last one
 #   cfg sync --host cur
 #   cfg sync --branch server   # that branch in every repo that has it, no checkout
-{ lib, pkgs, vars, com, cur }:
+{ lib, pkgs, vars }:
 let
-    scripts = import ../_lib.nix { inherit lib pkgs vars com; };
+    scripts = import ../_lib.nix { inherit lib pkgs vars; };
     subcommands = lib.concatStringsSep "\n" [
         (import ./commit.nix { inherit vars; })
         (import ./rename.nix { inherit vars; })

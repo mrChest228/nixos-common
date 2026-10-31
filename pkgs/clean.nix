@@ -1,13 +1,13 @@
 # clean — cleans the Nix store and keeps recent system, HM and user-profile generations
 # Runs as root; started by a user it re-runs itself through sudo and boots the selected generation
-# Installed by sys/config/packages.nix.
+# Installed by sys/config/packages+security.nix.
 # Usage:
 #   clean
 # Example:
 #   clean
-{ lib, pkgs, vars, com, cur }:
+{ lib, pkgs, vars }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars; };
 in pkgs.writeScriptBin "clean" ''
     #!${pkgs.nushell}/bin/nu -n
     $env.PATH = ${scripts.binPathNuList}

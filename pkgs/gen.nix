@@ -1,6 +1,6 @@
 # gen — lists, switches, deletes and cleans system, HM and user-profile generations
 # Root-only actions re-run through sudo when started by a user; gen does not take the config lock.
-# Installed by sys/config/packages.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
+# Installed by sys/config/packages+security.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
 # Usage:
 #   gen del [...ids]
 #   gen switch <id>
@@ -10,9 +10,9 @@
 # Examples:
 #   gen list
 #   gen clean
-{ lib, pkgs, vars, com, cur }:
+{ lib, pkgs, vars }:
 let
-    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
+    scripts = import ./_lib.nix { inherit lib pkgs vars; };
 in pkgs.writeScriptBin "gen" ''
     #!${pkgs.nushell}/bin/nu -n
     $env.PATH = ${scripts.binPathNuList}
