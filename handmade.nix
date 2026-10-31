@@ -3,7 +3,7 @@
 #   lib.extend (final: prev: handmade.myLibs (com + /lib) final);  pkgs.appendOverlays [ (handmade.myPkgs (com + /pkgs)) ]
 { lib, vars, com, cur }: let
     visible = name: !lib.hasPrefix "_" name && !lib.hasPrefix "." name;
-    ls = dir: if builtins.pathExists dir then lib.filterAttrs (name: _: visible name) (builtins.readDir dir) else {};
+    ls = dir: if lib.pathExists dir then lib.filterAttrs (name: _: visible name) (builtins.readDir dir) else {};
     isNix = name: type: type != "directory" && lib.hasSuffix ".nix" name;
 in {
     # dir/<name>.nix is { lib }: { … }; all of them merged into one attrset
@@ -23,7 +23,7 @@ in {
                 path = directory + "/${name}";
                 old = previous.${name} or {};
             in
-                if builtins.pathExists (path + /package.nix) then import (path + /package.nix) pkgArgs
+                if lib.pathExists (path + /package.nix) then import (path + /package.nix) pkgArgs
                 else if !lib.isAttrs old || lib.isDerivation old then throw "${toString path}: a group can't replace the package `${name}`"
                 else old // scan path old
             ) (lib.filterAttrs (_: type: type == "directory") entries);
