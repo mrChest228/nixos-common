@@ -5,8 +5,12 @@
     services.chrony = {
         enable = true;
         # NTS: the time packets are authenticated, nobody on the way can shift the clock. Three independent sources,
-        # so a lying one is outvoted (one is none, two is a dispute, three is a quorum). Polled every 1-17 minutes
+        # so a lying one is outvoted (one is none, two is a dispute, three is a quorum)
         enableNTS = true;
-        servers = [ "time.cloudflare.com" "nts.netnod.se" "ptbtime1.ptb.de" ];
+        # The module's `servers` can't take per-server options, so the lines are written here. maxpoll 12 = poll every
+        # 1-68 min once settled (default 10 = 17 min; timesyncd 34 min) to spare the public servers; iburst still syncs fast at boot
+        servers = [ ];
+        extraConfig = lib.concatMapStrings (s: "server ${s} iburst nts maxpoll 12\n")
+            [ "time.cloudflare.com" "nts.netnod.se" "ptbtime1.ptb.de" ];
     };
 }
