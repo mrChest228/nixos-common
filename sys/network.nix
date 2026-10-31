@@ -4,7 +4,7 @@
         #TODO: hosts with My server (if the Internet or electricy will be disabled (for local network))
         networkmanager = {
             enable = true;
-            dns = "none"; # Don't use default dns from my router. Only my own dns (unbound below)
+            dns = lib.mkForce "none"; # Don't use default dns from my router. Only my own dns (unbound below)
             connectionConfig = {
                 "ipv6.ip6-privacy" = 2;        # Use random-generated IP-adresses (static IP continue working)
             };
