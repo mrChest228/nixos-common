@@ -1,10 +1,11 @@
 # My lib functions and packages for every host. The host flake does
 #   lib.extend (final: prev: handmade.myLibs (com + /lib) final prev)
 #   pkgs.appendOverlays [ (handmade.myPkgs (com + /pkgs)) (handmade.myPkgs (cur + /pkgs)) ]
-# An entry of a dir is <entry>.nix or <entry>/<name> (function.nix for lib, package.nix for pkgs): a function over
-# the args below, its result becomes lib.<entry> / pkgs.<entry>. A subdir without <name> is a group: its entries land
-# one level deeper (pkgs.<subdir>.<entry>) on top of what is already there. Names starting with _ or . are skipped.
-# `lib` here is nixpkgs' own: the names an overlay produces can't depend on `final`, only their values can
+# How a dir is read: foo.nix -> lib.foo / pkgs.foo, the file is a function over the args below and its result is the
+# value; foo/function.nix (lib) or foo/package.nix (pkgs) -> the same, the other files in foo/ are its own business;
+# foo/ without that file -> a group: read the same way one level deeper (pkgs.foo.bar), merged into pkgs.foo if it
+# already is an attrset. Names starting with _ or . are skipped. `lib` here is nixpkgs' own: an overlay's attribute
+# names can't depend on `final`, only its values can
 { lib, vars, com, cur }: let
     visible = entry: !lib.hasPrefix "_" entry && !lib.hasPrefix "." entry;
     isNixFile = entry: type: type != "directory" && lib.hasSuffix ".nix" entry;
@@ -27,8 +28,6 @@
                 import (path + "/${name}") args
             else if !lib.isAttrs old || lib.isDerivation old then
                 throw "${toString path}: a group can't replace `${subdir}`, which is not an attrset"
-            else if importMy name args path old == {} then
-                throw "${toString path}: neither ${name} nor anything to group inside"
             else
                 old // importMy name args path old
         ) (lib.filterAttrs isDir entries);
