@@ -7,13 +7,13 @@
 # already is an attrset. Names starting with _ or . are skipped. `lib` here is nixpkgs' own: an overlay's attribute
 # names can't depend on `final`, only its values can
 { lib, vars, com, cur }: let
-    visible = entry: !lib.hasPrefix "_" entry && !lib.hasPrefix "." entry;
+    isVisible = entry: !lib.hasPrefix "_" entry && !lib.hasPrefix "." entry;
     isNixFile = entry: type: type != "directory" && lib.hasSuffix ".nix" entry;
     isDir = entry: type: type == "directory";
 
     # importMy "package.nix" args dir prev: the attrset built from dir; prev holds what its names mean so far
     importMy = name: args: dir: prev: let
-        entries = lib.filterAttrs (entry: type: visible entry) (if lib.pathExists dir then builtins.readDir dir else {});
+        entries = lib.filterAttrs (entry: type: isVisible entry) (if lib.pathExists dir then builtins.readDir dir else {});
 
         # concatMapAttrs: every attr -> a small attrset, all of them merged (here it renames foo.nix -> foo)
         files = lib.concatMapAttrs (file: type: {
@@ -29,6 +29,7 @@
             else if !lib.isAttrs old || lib.isDerivation old then
                 throw "${toString path}: a group can't replace `${subdir}`, which is not an attrset"
             else
+                # a group: what this name already held (nixpkgs or an earlier overlay) plus the dir read one level deeper
                 old // importMy name args path old
         ) (lib.filterAttrs isDir entries);
 
