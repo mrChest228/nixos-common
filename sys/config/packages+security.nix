@@ -9,6 +9,6 @@
             "${pkgs.reconf}/bin/reconf"
         ];
     }];
-    # the repos are owned by users but read by root
+    # the repos are owned by root but read by users (git refuses a repo owned by someone else otherwise)
     programs.git.config.safe.directory = [ "${vars.configPath}/*" ];
 }
