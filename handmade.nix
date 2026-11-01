@@ -10,15 +10,14 @@
     isVisible = entry: !lib.hasPrefix "_" entry && !lib.hasPrefix "." entry;
     isNixFile = entry: type: type != "directory" && lib.hasSuffix ".nix" entry;
     isDir = entry: type: type == "directory";
+    # { "foo.nix" = type; } -> { foo = "foo.nix"; }: names without the suffix, file names as the values
+    stripNix = lib.concatMapAttrs (file: type: { ${lib.removeSuffix ".nix" file} = file; });
 
     # importMy "package.nix" args dir prev: the attrset built from dir; prev holds what its names mean so far
     importMy = name: args: dir: prev: let
         entries = lib.filterAttrs (entry: type: isVisible entry) (if lib.pathExists dir then builtins.readDir dir else {});
 
-        # concatMapAttrs: every attr -> a small attrset, all of them merged (here it renames foo.nix -> foo)
-        files = lib.concatMapAttrs (file: type: {
-            ${lib.removeSuffix ".nix" file} = import (dir + "/${file}") args;
-        }) (lib.filterAttrs isNixFile entries);
+        files = lib.mapAttrs (entry: file: import (dir + "/${file}") args) (stripNix (lib.filterAttrs isNixFile entries));
 
         dirs = lib.mapAttrs (subdir: type: let
             path = dir + "/${subdir}";
