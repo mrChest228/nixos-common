@@ -113,8 +113,9 @@
         }
         def homeSwitchAll [] {
             # runuser from root asks no password; sudo env_reset drops NH_FLAKE, hence the explicit flake path
+            # --impure: see sys/nix.nix (iets reads the locked local common only in impure mode)
             if (rootHmSafe) {
-                with-env { HOME: "/root" } { ^${pkgs.nh}/bin/nh home switch ${vars.configPath}/cur -c "root@${vars.host}" }
+                with-env { HOME: "/root" } { ^${pkgs.nh}/bin/nh home switch ${vars.configPath}/cur -c "root@${vars.host}" --impure }
             } else {
                 print $"(ansi red)hm/root is not owned and permissioned for root; skipping root's home switch(ansi rst)"
             }
@@ -124,7 +125,7 @@
                     continue
                 }
                 let uid = ((^${pkgs.coreutils}/bin/id -u $u | complete).stdout | str trim)
-                ^${pkgs.util-linux}/bin/runuser -u $u -- ${pkgs.coreutils}/bin/env HOME=$"/home/($u)" XDG_RUNTIME_DIR=$"/run/user/($uid)" ${pkgs.nh}/bin/nh home switch ${vars.configPath}/cur -c $"($u)@${vars.host}"
+                ^${pkgs.util-linux}/bin/runuser -u $u -- ${pkgs.coreutils}/bin/env HOME=$"/home/($u)" XDG_RUNTIME_DIR=$"/run/user/($uid)" ${pkgs.nh}/bin/nh home switch ${vars.configPath}/cur -c $"($u)@${vars.host}" --impure
             }
         }
         # lstGen is the last built generation that was never booted (maybe switched into); deleting its
