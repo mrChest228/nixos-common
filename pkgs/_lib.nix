@@ -113,7 +113,7 @@
         }
         def homeSwitchAll [] {
             # runuser from root asks no password; sudo env_reset drops NH_FLAKE, hence the explicit flake path
-            # --impure: see sys/nix.nix (iets reads the locked local common only in impure mode)
+            # --impure: see sys/iets.nix (iets reads the locked local common only in impure mode)
             if (rootHmSafe) {
                 with-env { HOME: "/root" } { ^${pkgs.nh}/bin/nh home switch ${vars.configPath}/cur -c "root@${vars.host}" --impure }
             } else {

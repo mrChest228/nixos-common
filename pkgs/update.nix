@@ -24,7 +24,7 @@ in (scripts.mkRootFlockCommand "update" ''
             let lstGen = ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             # drivers depending on the new kernel (e.g. nvidia userspace vs the loaded module) break on
             # switch, so the new generation only takes effect after a reboot
-            # --impure: see sys/nix.nix (iets reads the locked local common only in impure mode)
+            # --impure: see sys/iets.nix (iets reads the locked local common only in impure mode)
             ^${pkgs.nh}/bin/nh os boot -R -H ${vars.host} ${vars.configPath}/cur --impure
             homeSwitchAll
             dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)

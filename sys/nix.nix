@@ -1,10 +1,4 @@
 { config, lib, pkgs, vars, com, cur, ... }: {
-    # iets in front of nix (nix, nix-build, nix-shell, nix-instantiate…): its own evaluator, the rest (daemon, store,
-    # unsupported commands) falls back to the real nix. The module comes from the host flake (inputs.iets.nixosModules.default).
-    # In pure mode iets reads no local input outside the flake, even one locked by rev like common (git+file), so
-    # rebuild/update and the home switches run nh with --impure: the lock is still followed, but the other pure-mode
-    # guards (getEnv, currentSystem, fetches without a hash) are off too
-    iets.classic.enable = true;
     nix = {
         channel.enable = false;
         settings = {
