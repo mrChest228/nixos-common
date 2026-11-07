@@ -1,20 +1,18 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     nix = {
         channel.enable = false;
         settings = {
             http-connections = 20; # Number of parallel downloads
             download-attempts = 3;
             max-jobs = 14;         # Number of parallel compilations
-            # experimental-features = [ "nix-command" "flakes" ]; # Enabled by default in Determinate-nix
+            experimental-features = [ "nix-command" "flakes" ];
             use-xdg-base-directories = true;
-            # Determinate
-            lazy-trees = true;
-            eval-cores = 0;
             allowed-users = [ "root" "@wheel" ]; # For nix-daemon
 
             substituters = [
                 "https://cache.nixos.org"
                 "https://nix-community.cachix.org"
+                "https://cache.numtide.com" # iets
 
                 "https://niri.cachix.org"
 
@@ -24,6 +22,7 @@
             trusted-public-keys = [
                 "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
                 "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+                "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
 
                 "niri.cachix.org-1:Wv0OmO7PsuocRKzfDoJ3mulSl7Z6oezYhGhR+3W2964="
 

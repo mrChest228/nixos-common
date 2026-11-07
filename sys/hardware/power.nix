@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     services = {
         power-profiles-daemon.enable = false; # TLP is better
         tlp = {
@@ -16,7 +16,10 @@
                 WIFI_PWR_ON_BAT = "on";
                 SOUND_POWER_SAVE_ON_BAT = 1;
                 SOUND_POWER_SAVE_CONTROLLER = "Y";
-                PCIE_ASPM_ON_BAT = "powersave";
+                # PCIE_ASPM_ON_BAT = "powersave"; # TODO: amd-s2idle blamed it for PCIe devices not reaching their s2idle state.
+                # After a rebuild on battery check: `cat /sys/module/pcie_aspm/parameters/policy` -> [default]; `amd-s2idle`
+                # report has no ASPM warnings and the suspend reaches s2idle; `powertop` idle drain is not worse than before.
+                # Fine -> delete this line; drain got worse -> re-enable and retest
                 RUNTIME_PM_ON_BAT = "auto";
                 MAX_LOST_WORK_SECS_ON_BAT = 60;
                 NMI_WATCHDOG = 0;
