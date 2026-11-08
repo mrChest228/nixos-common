@@ -20,6 +20,7 @@
             allow-new-privileges = false;
             use-cgroups = true;          # A build is one cgroup: cancel kills all of it, CPU/memory accounted
             auto-allocate-uids = true;   # A fresh UID per build instead of 32 nixbld* accounts (nrBuildUsers = 0)
+            
             use-xdg-base-directories = true;
             allowed-users = [ "root" "@wheel" ]; # For nix-daemon
 
