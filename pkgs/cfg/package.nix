@@ -23,9 +23,9 @@ let
         (import ./sync.nix { inherit vars; })
         (import ./perms.nix { inherit lib pkgs vars; })
     ];
-    definitions = lib.concatStringsSep "\n" (map
-        (file: import file { inherit pkgs vars; })
-        [ ./report.nix ./history.nix ./sync-lib.nix ./inputs.nix ./lib.nix ]);
+    definitions = [ ./report.nix ./history.nix ./sync-lib.nix ./inputs.nix ./lib.nix ]
+        |> map (file: import file { inherit pkgs vars; })
+        |> lib.concatStringsSep "\n";
 in (scripts.mkRootFlockCommand "cfg" ''
     ${scripts.nuBase}
     ${definitions}

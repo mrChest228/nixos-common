@@ -14,16 +14,16 @@
     # importMy "package.nix" args dir prev: the attrset built from dir; prev holds what its names mean so far.
     # concatMapAttrs: every entry -> a one-attribute set { <name> = <value>; }, all of them merged
     importMy = name: args: dir: prev: let
-        entries = lib.filterAttrs (entry: type: isVisible entry)
-            (if lib.pathExists dir then builtins.readDir dir else {});
+        entries = (if lib.pathExists dir then builtins.readDir dir else {})
+            |> lib.filterAttrs (entry: type: isVisible entry);
 
         # foo.nix -> { foo = …; }
-        files = lib.concatMapAttrs (entry: type: {
+        files = entries |> lib.filterAttrs isNixFile |> lib.concatMapAttrs (entry: type: {
             ${lib.removeSuffix ".nix" entry} = import (dir + "/${entry}") args;
-        }) (lib.filterAttrs isNixFile entries);
+        });
 
         # foo/ -> { foo = …; }
-        dirs = lib.concatMapAttrs (entry: type: let
+        dirs = entries |> lib.filterAttrs isDir |> lib.concatMapAttrs (entry: type: let
             path = dir + "/${entry}";
             old = prev.${entry} or {};
         in {
@@ -35,7 +35,7 @@
                 else
                     # a group: what this name already held (nixpkgs or an earlier overlay) plus the dir read one level deeper
                     old // importMy name args path old;
-        }) (lib.filterAttrs isDir entries);
+        });
 
         twice = lib.attrNames (lib.intersectAttrs files dirs);
     in

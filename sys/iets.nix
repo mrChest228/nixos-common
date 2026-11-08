@@ -15,8 +15,10 @@
     environment.etc."iets.toml".text = ''
         fix-hashes = "never"
     '';
-    systemd.tmpfiles.rules = lib.concatMap ({ home, user }: [
-        "d ${home}/.config 0755 ${user} ${user} - -" # Else the link creates .config as root's in a fresh home
-        "L+ ${home}/.config/iets/iets.toml - - - - /etc/iets.toml"
-    ]) ([ { home = "/root"; user = "root"; } ] ++ map (user: { home = "/home/${user}"; inherit user; }) vars.users);
+    systemd.tmpfiles.rules = [ { home = "/root"; user = "root"; } ]
+        ++ map (user: { home = "/home/${user}"; inherit user; }) vars.users
+        |> lib.concatMap ({ home, user }: [
+            "d ${home}/.config 0755 ${user} ${user} - -" # Else the link creates .config as root's in a fresh home
+            "L+ ${home}/.config/iets/iets.toml - - - - /etc/iets.toml"
+        ]);
 }

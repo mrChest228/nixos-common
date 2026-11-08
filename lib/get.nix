@@ -2,13 +2,13 @@
     visible = name: !lib.hasPrefix "_" name && !lib.hasPrefix "." name;
     nixFiles = recurse: dir: let
         ls = builtins.readDir dir;
-    in lib.concatMap (name:
+    in lib.attrNames ls |> lib.concatMap (name:
         let path = dir + "/${name}"; type = ls.${name}; in
         if !visible name then []
         else if type == "directory" then (if recurse then nixFiles true path else [])
         else if lib.hasSuffix ".nix" name then [ path ]
         else []
-    ) (lib.attrNames ls);
+    );
 in
     # imports = get [ ... ]: file -> itself, dir -> its top-level .nix files, dir/... -> every .nix below it.
     # Names starting with _ or . are never picked up (a dir named explicitly is still read, only its _/. children are
