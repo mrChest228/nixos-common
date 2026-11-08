@@ -12,6 +12,6 @@
         # written here. maxpoll 12 = poll every 1-68 min once settled (default 10 = 17 min; timesyncd 34 min) to spare
         # the public servers; iburst still syncs fast at boot
         servers = [ ];
-        extraConfig = config.networking.timeServers |> lib.concatMapStrings (s: "server ${s} iburst nts maxpoll 12\n");
+        extraConfig = lib.concatMapStrings (s: "server ${s} iburst nts maxpoll 12\n") config.networking.timeServers;
     };
 }

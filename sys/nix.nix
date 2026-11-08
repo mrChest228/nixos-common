@@ -7,23 +7,19 @@
             max-jobs = 14;         # Number of parallel compilations
             experimental-features = [
                 "nix-command" "flakes"
-                "pipe-operators"     # a |> f = f a: the data, then its steps left to right (see lib/get.nix); iets has
-                                     # it always, the real nix (nix repl, flake check) only with the flag. Not in nixpkgs
-                "cgroups"            # use-cgroups
-                "auto-allocate-uids" # auto-allocate-uids
+                "pipe-operators"     # a |> f = f a, for chains (handmade.nix); iets has it always, the real nix only with the flag
+                "cgroups" "auto-allocate-uids"
             ];
 
-            # Build sandbox: nix's own Linux defaults, written out so a change is a diff here and not a silent new
-            # default (the server builds for other machines too). A build sees only its store inputs and /build in
-            # private mount/pid/net/ipc/uts namespaces (a fixed-output build keeps the network, its hash guards it)
+            # Build sandbox, nix's Linux defaults written out (the server builds for other machines too): private
+            # mount/pid/net/ipc/uts namespaces, only the store inputs and /build visible (a fixed-output build keeps the
+            # network, its hash guards it)
             sandbox = true;
-            sandbox-fallback = false;    # a kernel that can't sandbox fails the build instead of running it outside
-            filter-syscalls = true;      # no setuid/setgid files, ACLs, xattrs from a build
+            sandbox-fallback = false;    # Was true: a kernel that can't sandbox would build outside it; fail instead
+            filter-syscalls = true;      # No setuid/setgid files, ACLs, xattrs from a build
             allow-new-privileges = false;
-            use-cgroups = true;          # every build in its own cgroup: cancelling kills all of it, detached children too,
-                                         # CPU/memory are accounted; uid-range builds (containers, images) need it
-            auto-allocate-uids = true;   # a fresh UID from start-id..+id-count per build instead of 32 nixbld* accounts
-                                         # (nixpkgs then sets nrBuildUsers = 0 and drops them)
+            use-cgroups = true;          # A build is one cgroup: cancel kills all of it, CPU/memory accounted
+            auto-allocate-uids = true;   # A fresh UID per build instead of 32 nixbld* accounts (nrBuildUsers = 0)
             use-xdg-base-directories = true;
             allowed-users = [ "root" "@wheel" ]; # For nix-daemon
 
