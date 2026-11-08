@@ -1,6 +1,6 @@
-# clean — the nh-clean job (old generations, gc, store optimise; sys/nix.nix) now, with the output here, then the
-# bootloader. Runs the service's own ExecStart in a transient unit nh-clean-now at low priority; Ctrl+C stops it.
-# Root; a user is re-run through sudo (NOPASSWD for wheel). Only generations, fast: `gen clean`.
+# clean — the nh-clean job (sys/nix.nix: generations, bootloader, gc, store optimise) now, with the output here. Runs the
+# service's own ExecStart in a transient unit nh-clean-now at low priority; Ctrl+C stops it. Root; a user is re-run
+# through sudo (NOPASSWD for wheel). Only generations + bootloader, fast: `gen clean`.
 # Usage:
 #   clean
 { lib, pkgs, vars, com, cur }:
@@ -14,6 +14,5 @@ in pkgs.writeScriptBin "clean" ''
         let job = (^${pkgs.systemd}/bin/systemctl show -P ExecStart nh-clean.service | parse -r 'path=(?<path>\S+)' | get 0.path)
         # nice is CPU only; io best-effort 7, not idle, so it keeps moving on a busy disk (nvme with `none` ignores it)
         ^${pkgs.systemd}/bin/systemd-run --pty --wait --collect -q --unit nh-clean-now --nice 19 -p IOSchedulingClass=best-effort -p IOSchedulingPriority=7 $job
-        ^/run/current-system/bin/switch-to-configuration boot
     }
 ''

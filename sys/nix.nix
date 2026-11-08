@@ -48,32 +48,36 @@
     programs.nh = {
         enable = true;
         flake = "${vars.configPath}/cur";
-        clean = { # The nh-clean timer: generations, gc, store optimise; by hand with the output here: `clean`
-            enable = true;
-            dates = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
-            extraArgs = "--keep 3 --keep-since 3d --optimise";
-        };
     };
 
     nix = {
         settings.auto-optimise-store = false; # Would hash and hard-link every path inside the daemon during a switch; nh-clean does it
-        optimise.automatic = false;           # The same job as nh-clean --optimise
+        optimise.automatic = false;           # nh-clean
         gc.automatic = false;                 # nh-clean
     };
 
-    # Nh auto clean + bootloader updating
+    # nh-clean: `gen clean` (generations + bootloader, fast) and then the long part, gc + store optimise. Nightly; by hand: `clean`
     systemd = {
-        timers.nh-clean.timerConfig = {
-            Persistent = true;
-            RandomizedDelaySec = "15m";
-            AccuracySec = "1m"; # Wait at most 1 minute to group service with other. It needs for battery saving
+        timers.nh-clean = {
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+                OnCalendar = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
+                Persistent = true;
+                RandomizedDelaySec = "15m";
+                AccuracySec = "1m"; # Wait at most 1 minute to group service with other. It needs for battery saving
+            };
         };
         services.nh-clean = {
+            path = [ config.nix.package ];
+            script = ''
+                ${pkgs.gen}/bin/gen clean
+                ${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --optimise
+            '';
             serviceConfig = {
+                Type = "oneshot";
                 CPUSchedulingPolicy = "idle";
                 IOSchedulingClass = "idle";
             };
-            postStop = "/run/current-system/bin/switch-to-configuration boot || true";
         };
     };
 }
