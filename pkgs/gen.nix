@@ -1,5 +1,5 @@
 # gen — lists, switches, deletes and cleans system, HM and user-profile generations
-# Root-only actions re-run through sudo when started by a user; gen does not take the config lock.
+# Root-only actions re-run through sudo (NOPASSWD for wheel) when started by a user; gen does not take the config lock.
 # Installed by sys/config/packages+security.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
 # Usage:
 #   gen del [...ids]
@@ -16,7 +16,7 @@ let
 in pkgs.writeScriptBin "gen" ''
     #!${pkgs.nushell}/bin/nu -n
     $env.PATH = ${scripts.binPathNuList}
-    # root-only subcommands re-run the whole command through sudo (which asks for the password) when started by a user
+    # root-only subcommands re-run the whole command through sudo when started by a user
     def rootOrSudo [...args: string] {
         if not (is-admin) { exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) ...$args }
     }
