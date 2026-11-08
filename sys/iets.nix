@@ -12,8 +12,11 @@
     # fix-hashes: on a fixed-output hash mismatch iets offers to rewrite the hash in the .nix file and build again
     # ("ask" by default, on a terminal only). That hash is the one check that the download is what was meant, so a
     # mismatch stays an error, as in nix
+    # workers: eval threads; the default is the same (cores, at most 4), written so the limit is here and not in iets.
+    # Once: --iets-option workers N or IETS_WORKERS=N
     environment.etc."iets.toml".text = ''
         fix-hashes = "never"
+        workers = 4
     '';
     systemd.tmpfiles.rules = [ { home = "/root"; user = "root"; } ]
         ++ map (user: { home = "/home/${user}"; inherit user; }) vars.users
