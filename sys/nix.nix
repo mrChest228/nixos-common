@@ -55,7 +55,10 @@
         };
     };
 
-    nix = { # Disable store optimise. It break the bcachefs and its builtin optimisations
+    # No store optimise or gc from the daemon or a timer: `clean` does both in the background at low priority, when
+    # asked. auto-optimise-store would hash and hard-link every path inside the daemon while it is written, i.e.
+    # during the download phase of a switch (bcachefs took the hard-link storm badly once: lags, i_nlink fsck fixes)
+    nix = {
         settings.auto-optimise-store = false;
         optimise.automatic = false;
         gc.automatic = false;

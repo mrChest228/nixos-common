@@ -33,7 +33,7 @@ in pkgs.writeScriptBin "gen" ''
     # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean
     def "main clean" [] {
         rootOrSudo clean
-        ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --nogc --nogcroots
+        ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --no-gc --no-gcroots
         ^/run/current-system/bin/switch-to-configuration boot
     }
     def "main list" [] { ^${pkgs.nh}/bin/nh os info }
