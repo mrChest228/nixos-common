@@ -1,19 +1,14 @@
 { config, lib, pkgs, vars, com, cur, ... }: {
-    # iets in front of nix (nix, nix-build, nix-shell, nix-instantiate…): its own evaluator, the rest (daemon, store,
-    # unsupported commands) falls back to the real nix. The module comes from the host flake (inputs.iets.nixosModules.default).
-    # In pure mode iets reads no local input outside the flake, even one locked by rev like common (git+file), so
-    # rebuild/update and the home switches run nh with --impure: the lock is still followed, but the other pure-mode
-    # guards (getEnv, currentSystem, fetches without a hash) are off too
+    # iets evaluates (nix, nix-build, nix-shell…), the real nix does the rest (daemon, store, unsupported commands).
+    # Module from the host flake. In pure mode it refuses local inputs outside the flake, even common locked by rev,
+    # so nh runs with --impure (the lock is still followed, the other pure guards are off)
     iets.classic.enable = true;
 
-    # iets has no machine-wide settings file by design (docs/explanation/history.md: a client builds with the user's
-    # settings), only ~/.config/iets/iets.toml, so one root-owned file is linked into every account that runs it:
-    # root (rebuild, update, cfg) and vars.users. The accounts don't choose these settings, like the rest of the system
-    # fix-hashes: on a fixed-output hash mismatch iets offers to rewrite the hash in the .nix file and build again
-    # ("ask" by default, on a terminal only). That hash is the one check that the download is what was meant, so a
-    # mismatch stays an error, as in nix
-    # workers: eval threads; the default is the same (cores, at most 4), written so the limit is here and not in iets.
-    # Once: --iets-option workers N or IETS_WORKERS=N
+    # iets reads only ~/.config/iets/iets.toml (no system file by design), so one root-owned file is linked into
+    # every account that runs it: root (rebuild, update, cfg) and vars.users
+    # fix-hashes: never rewrite a mismatching fixed-output hash in the .nix file ("ask" by default); the hash is
+    # the one check that the download is what was meant. workers: eval threads, the default, written to be found
+    # here (once: --iets-option workers N or IETS_WORKERS=N)
     environment.etc."iets.toml".text = ''
         fix-hashes = "never"
         workers = 4
