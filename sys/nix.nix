@@ -48,6 +48,11 @@
     programs.nh = {
         enable = true;
         flake = "${vars.configPath}/cur";
+        clean = { # The nh-clean timer: generations, gc, store optimise; by hand with the output here: `clean`
+            enable = true;
+            dates = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
+            extraArgs = "--keep 3 --keep-since 3d --optimise";
+        };
     };
 
     nix = {
@@ -56,22 +61,19 @@
         gc.automatic = false;                 # nh-clean
     };
 
-    # Nightly `clean run` (generations, gc, optimise, bootloader) at idle priority; by hand: `clean`
+    # Nh auto clean + bootloader updating
     systemd = {
-        timers.nh-clean = {
-            wantedBy = [ "timers.target" ];
-            timerConfig = {
-                OnCalendar = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
-                Persistent = true;
-                RandomizedDelaySec = "15m";
-                AccuracySec = "1m"; # Wait at most 1 minute to group service with other. It needs for battery saving
-            };
+        timers.nh-clean.timerConfig = {
+            Persistent = true;
+            RandomizedDelaySec = "15m";
+            AccuracySec = "1m"; # Wait at most 1 minute to group service with other. It needs for battery saving
         };
-        services.nh-clean.serviceConfig = {
-            Type = "oneshot";
-            ExecStart = "${pkgs.clean}/bin/clean run";
-            CPUSchedulingPolicy = "idle";
-            IOSchedulingClass = "idle";
+        services.nh-clean = {
+            serviceConfig = {
+                CPUSchedulingPolicy = "idle";
+                IOSchedulingClass = "idle";
+            };
+            postStop = "/run/current-system/bin/switch-to-configuration boot || true";
         };
     };
 }
