@@ -48,35 +48,30 @@
     programs.nh = {
         enable = true;
         flake = "${vars.configPath}/cur";
-        clean = {
-            enable = true;
-            dates = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
-            extraArgs = "--keep 3 --keep-since 3d";
-        };
     };
 
-    # No store optimise or gc from the daemon or a timer: `clean` does both in the background at low priority, when
-    # asked. auto-optimise-store would hash and hard-link every path inside the daemon while it is written, i.e.
-    # during the download phase of a switch (bcachefs took the hard-link storm badly once: lags, i_nlink fsck fixes)
     nix = {
-        settings.auto-optimise-store = false;
-        optimise.automatic = false;
-        gc.automatic = false;
+        settings.auto-optimise-store = false; # Would hash and hard-link every path inside the daemon during a switch; nh-clean does it
+        optimise.automatic = false;           # The same job as nh-clean --optimise
+        gc.automatic = false;                 # nh-clean
     };
-    
-    # Nh auto clean + bootloader updating
+
+    # Nightly `clean run` (generations, gc, optimise, bootloader) at idle priority; by hand: `clean`
     systemd = {
-        timers.nh-clean.timerConfig = {
-            Persistent = true;
-            RandomizedDelaySec = "15m";
-            AccuracySec = "1m"; # Wait at most 1 minute to group service with other. It needs for battery saving
-        };
-        services.nh-clean = {
-            serviceConfig = {
-                CPUSchedulingPolicy = "idle";
-                IOSchedulingClass = "idle";
+        timers.nh-clean = {
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+                OnCalendar = "02:00"; # For servers. Notebooks run it after the turning on. They don't need to wait the 12 PM
+                Persistent = true;
+                RandomizedDelaySec = "15m";
+                AccuracySec = "1m"; # Wait at most 1 minute to group service with other. It needs for battery saving
             };
-            postStop = "/run/current-system/bin/switch-to-configuration boot || true";
+        };
+        services.nh-clean.serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.clean}/bin/clean run";
+            CPUSchedulingPolicy = "idle";
+            IOSchedulingClass = "idle";
         };
     };
 }
