@@ -1,4 +1,4 @@
-{ pkgs, vars }:
+{ vars, bin }:
 ''
         const REPORT_INDENT = { branch: "   ", section: "      ", item: "         ", detail: "            " }
         const REPORT_COLOR = { reset: (ansi --escape '0m'), repo: (ansi --escape '1;37m'), branch: (ansi --escape '34m'), section: (ansi --escape '3;36m'), red: (ansi --escape '31m'), redBold: (ansi --escape '1;31m'), green: (ansi --escape '32m'), greenBold: (ansi --escape '1;32m'), yellow: (ansi --escape '33m'), yellowBold: (ansi --escape '1;33m'), cyan: (ansi --escape '36m'), magenta: (ansi --escape '35m'), magentaBold: (ansi --escape '1;35m'), blue: (ansi --escape '34m'), white: (ansi --escape '37m'), whiteBold: (ansi --escape '1;37m'), yellowBright: (ansi --escape '93m'), darkGray: (ansi --escape '90m') }

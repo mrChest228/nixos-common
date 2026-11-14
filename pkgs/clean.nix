@@ -10,9 +10,9 @@ in pkgs.writeScriptBin "clean" ''
     #!${pkgs.nushell}/bin/nu -n
     $env.PATH = ${scripts.binPathNuList}
     def main [] {
-        if not (is-admin) { exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) }
-        let job = (^${pkgs.systemd}/bin/systemctl show -P ExecStart nh-clean.service | parse -r 'path=(?<path>\S+)' | get 0.path)
+        if not (is-admin) { exec ${scripts.bin.sudo} ($env.CURRENT_FILE | path expand) }
+        let job = (^${scripts.bin.systemctl} show -P ExecStart nh-clean.service | parse -r 'path=(?<path>\S+)' | get 0.path)
         # nice is CPU only; io best-effort 7, not idle, so it keeps moving on a busy disk (nvme with `none` ignores it)
-        ^${pkgs.systemd}/bin/systemd-run --pty --wait --collect -q --unit nh-clean-now --nice 19 -p IOSchedulingClass=best-effort -p IOSchedulingPriority=7 $job
+        ^${scripts.bin."systemd-run"} --pty --wait --collect -q --unit nh-clean-now --nice 19 -p IOSchedulingClass=best-effort -p IOSchedulingPriority=7 $job
     }
 ''

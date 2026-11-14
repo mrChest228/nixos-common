@@ -13,13 +13,13 @@ in (scripts.mkRootFlockCommand "rebuild" ''
         def main [message?: string, --no-add(-n)] {
             checkNoForeign
             commitIfChanged "Rebuild" $message --no-add=$no_add
-            let bootedGen = ((^${pkgs.coreutils}/bin/readlink -f /run/current-system | complete).stdout | str trim)
-            let lstGen = ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
+            let bootedGen = ((^${scripts.bin.readlink} -f /run/current-system | complete).stdout | str trim)
+            let lstGen = ((^${scripts.bin.readlink} -f /nix/var/nix/profiles/system | complete).stdout | str trim)
             # --impure: see sys/iets.nix (iets reads the locked local common only in impure mode)
-            ^${pkgs.nh}/bin/nh os switch -R -H ${vars.host} ${vars.configPath}/cur --impure
-            dropLstGen $bootedGen $lstGen ((^${pkgs.coreutils}/bin/readlink -f /nix/var/nix/profiles/system | complete).stdout | str trim)
-            ^${pkgs.gen}/bin/gen clean
+            ^${scripts.bin.nh} os switch -R -H ${vars.host} ${vars.configPath}/cur --impure
+            dropLstGen $bootedGen $lstGen ((^${scripts.bin.readlink} -f /nix/var/nix/profiles/system | complete).stdout | str trim)
+            ^${scripts.bin.gen} clean
             # activation may have created users from vars.users; their hm dirs get re-owned now
-            ^${pkgs.cfg}/bin/cfg perms
+            ^${scripts.bin.cfg} perms
         }
     '').command

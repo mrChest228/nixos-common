@@ -13,6 +13,6 @@ in (scripts.mkRootFlockCommand "reconf" ''
             checkNoForeign
             commitIfChanged "Reconf" $message --no-add=$no_add
             homeSwitchAll
-            ^${pkgs.gen}/bin/gen clean
+            ^${scripts.bin.gen} clean
         }
     '').command

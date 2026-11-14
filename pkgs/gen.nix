@@ -18,12 +18,12 @@ in pkgs.writeScriptBin "gen" ''
     $env.PATH = ${scripts.binPathNuList}
     # root-only subcommands re-run the whole command through sudo when started by a user
     def rootOrSudo [...args: string] {
-        if not (is-admin) { exec /run/wrappers/bin/sudo ($env.CURRENT_FILE | path expand) ...$args }
+        if not (is-admin) { exec ${scripts.bin.sudo} ($env.CURRENT_FILE | path expand) ...$args }
     }
     def "main del" [...ids: string] {
         rootOrSudo del ...$ids
-        ^/run/current-system/sw/bin/nix-env --profile /nix/var/nix/profiles/system --delete-generations ...$ids
-        ^/run/current-system/bin/switch-to-configuration boot
+        ^${scripts.bin."nix-env"} --profile /nix/var/nix/profiles/system --delete-generations ...$ids
+        ^${scripts.bin."switch-to-configuration"} boot
     }
     def "main switch" [id: string] {
         rootOrSudo switch $id
@@ -33,10 +33,10 @@ in pkgs.writeScriptBin "gen" ''
     # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean
     def "main clean" [] {
         rootOrSudo clean
-        ^${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --no-gc --no-gcroots
-        ^/run/current-system/bin/switch-to-configuration boot
+        ^${scripts.bin.nh} clean all --keep 3 --keep-since 3d --no-gc --no-gcroots
+        ^${scripts.bin."switch-to-configuration"} boot
     }
-    def "main list" [] { ^${pkgs.nh}/bin/nh os info }
-    def "main ls" [] { ^/run/current-system/sw/bin/nixos-rebuild list-generations }
+    def "main list" [] { ^${scripts.bin.nh} os info }
+    def "main ls" [] { ^${scripts.bin."nixos-rebuild"} list-generations }
     def main [] { help main }
 ''

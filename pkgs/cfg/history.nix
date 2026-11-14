@@ -1,4 +1,4 @@
-{ pkgs, vars }:
+{ vars, bin }:
 ''
         def commitRecords [records: list<record>] {
             $records | each { |entry| { hash: $entry.hash, subject: $entry.subject, date: $entry.date } }
@@ -88,7 +88,7 @@
             let sudoUser = ($env.SUDO_USER? | default "")
             if not (is-admin) or ($sudoUser | is-empty) or not (is-terminal --stdin) { return false }
             try {
-                ^${pkgs.util-linux}/bin/runuser -u $sudoUser -- /run/wrappers/bin/sudo -k -v -p $"($prompt) [password for ($sudoUser)]: "
+                ^${bin.runuser} -u $sudoUser -- ${bin.sudo} -k -v -p $"($prompt) [password for ($sudoUser)]: "
                 true
             } catch { false }
         }

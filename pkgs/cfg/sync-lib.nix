@@ -1,4 +1,4 @@
-{ pkgs, vars }:
+{ vars, bin }:
 ''
         def fetchCandidate [repo: string, branch: string] {
             let result = (gitSafe $repo fetch --refmap= origin $"+refs/heads/($branch):refs/remotes/origin/candidate" | complete)

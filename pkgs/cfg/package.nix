@@ -21,10 +21,10 @@ let
         (import ./commit.nix { inherit vars; })
         (import ./rename.nix { inherit vars; })
         (import ./sync.nix { inherit vars; })
-        (import ./perms.nix { inherit lib pkgs vars; })
+        (import ./perms.nix { inherit lib vars; inherit (scripts) bin; })
     ];
     definitions = [ ./report.nix ./history.nix ./sync-lib.nix ./inputs.nix ./lib.nix ]
-        |> map (file: import file { inherit pkgs vars; })
+        |> map (file: import file { inherit vars; inherit (scripts) bin; })
         |> lib.concatStringsSep "\n";
 in (scripts.mkRootFlockCommand "cfg" ''
     ${scripts.nuBase}

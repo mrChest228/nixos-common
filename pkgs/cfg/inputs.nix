@@ -1,4 +1,4 @@
-{ pkgs, vars }:
+{ vars, bin }:
 ''
         def inputSource [original: record] {
             let url = ($original.url? | default "")
