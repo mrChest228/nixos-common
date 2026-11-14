@@ -56,6 +56,9 @@
         gc.automatic = false;                 # nh-clean
     };
 
+    # gen clean reads the kept-generations count from here (programs.gen.generations, sys/options/programs/gen.nix)
+    environment.etc."gen/generations".text = toString config.programs.gen.generations;
+
     # nh-clean: `gen clean` (generations + bootloader, fast) and then the long part, gc + store optimise. Nightly; by hand: `clean`
     systemd = {
         timers.nh-clean = {
@@ -71,7 +74,7 @@
             path = [ config.nix.package ];
             script = ''
                 ${pkgs.gen}/bin/gen clean
-                ${pkgs.nh}/bin/nh clean all --keep ${toString (vars.generations or 5)} --keep-since 3d --optimise
+                ${pkgs.nh}/bin/nh clean all --keep ${toString config.programs.gen.generations} --keep-since 3d --optimise
             '';
             serviceConfig = {
                 Type = "oneshot";
