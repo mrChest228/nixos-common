@@ -14,6 +14,8 @@
         sudo = {
             enable = true;
             extraConfig = ''
+                # No credential cache: every sudo that needs a password asks for it (cfg confirms a rewritten history this way)
+                Defaults timestamp_timeout=0
                 # Enable sudo without password for mrChest
                 "mrChest" ALL=(ALL) NOPASSWD: ALL
             '';
