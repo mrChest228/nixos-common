@@ -72,8 +72,9 @@
         }
         # manual errors print in red; quiet errors go to the journal and notify the first user
         def reportProblem [repo: string, text: string, --quiet] {
-            if not $quiet { print -e $"(ansi red)($repo): ($text)(ansi rst)" }
-            if $quiet {
+            if not $quiet {
+                print -e $"(ansi red)($repo): ($text)(ansi rst)"
+            } else {
                 ^${bin.logger} -t nixos-config $"($repo): ($text)"
                 try {
                     ^${bin."systemd-run"} --quiet --machine $"${builtins.head vars.users}@.host" --user ${bin."notify-send"} -u critical "NixOS config" $text
@@ -87,7 +88,8 @@
             let firstUser = "${builtins.head vars.users}"
             let users = ${hmUsersNuList}
             mut bad = []
-            for repo in (ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name) {
+            # cur is the host repo mounted a second time, hostRepos skips it too
+            for repo in (ls ${vars.configPath} | where { |e| $e.type == dir and ($"($e.name)/.git" | path exists) } | get name | where { |n| ($n | path basename) != "cur" }) {
                 let hm = $"($repo)/hm"
                 if not ($hm | path exists) { continue }
                 for dir in (^${bin.find} $hm -mindepth 1 -maxdepth 1 -type d | lines) {
