@@ -7,6 +7,8 @@
         # --host aliases: `cur` is this host's repo, `com`/`common` the common one; else a repo name under the config dir
         def hostRepo [host: string] {
             let dir = (if $host == "cur" { "${vars.host}" } else if $host in [ "com" "common" ] { "common" } else { $host })
+            # a plain name only: root runs git on the result, `../x` must not lead out of the config dir
+            if $dir !~ '^[A-Za-z0-9_][A-Za-z0-9_.-]*$' { error make { msg: $"($host): not a repo name" } }
             let repo = $"${vars.configPath}/($dir)"
             if not ($"($repo)/.git" | path exists) { error make { msg: $"($repo) is not a config repo" } }
             $repo
