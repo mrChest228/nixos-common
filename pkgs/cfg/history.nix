@@ -81,20 +81,9 @@
             if $kept and (lockTampered $repo $added) { return { kept: false, reason: "narHash", deleted: [], added: $added, events: [] } }
             { kept: $kept, reason: (if $kept { "" } else { "history" }), deleted: $deleted, added: $added, events: $events }
         }
-        # The person at the terminal proves it is a person: sudo asks for the caller's password, ignoring any cached
-        # credentials (-k). Runs as the caller, because root is never asked. cfg's own NOPASSWD rule covers only the
-        # cfg binary, so it doesn't apply here
-        def confirmHuman [prompt: string] {
-            let sudoUser = ($env.SUDO_USER? | default "")
-            if not (is-admin) or ($sudoUser | is-empty) or not (is-terminal --stdin) { return false }
-            try {
-                ^${bin.runuser} -u $sudoUser -- ${bin.sudo} -k -v -p $"($prompt) [password for ($sudoUser)]: "
-                true
-            } catch { false }
-        }
         # Confirm before accepting a rewritten history.
         def confirmRewrite [repo: string, accepted: string, candidate: string] {
-            if ($env.SUDO_USER? | default "" | is-empty) or not (is-terminal --stdin) { return false }
+            if not (is-terminal --stdin) { return false }
             let diff = (historyDiff $repo $accepted $candidate)
             printRepoHeading $repo
             printBranchHeading (repoBranch $repo)
@@ -103,7 +92,7 @@
             confirmHuman "take origin's history?"
         }
         def confirmLocalRewrite [repo: string, accepted: string, candidate: string] {
-            if ($env.SUDO_USER? | default "" | is-empty) or not (is-terminal --stdin) { return false }
+            if not (is-terminal --stdin) { return false }
             let diff = (historyDiff $repo $accepted $candidate)
             printRepoHeading $repo
             printBranchHeading (repoBranch $repo)

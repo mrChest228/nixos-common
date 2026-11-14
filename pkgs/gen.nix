@@ -20,13 +20,21 @@ in pkgs.writeScriptBin "gen" ''
     def rootOrSudo [...args: string] {
         if not (is-admin) { exec ${scripts.bin.sudo} ($env.CURRENT_FILE | path expand) ...$args }
     }
+    ${scripts.nuConfirmHuman}
+    # del and switch change what the machine boots and what it can roll back to: a person confirms with the password.
+    # Started by a config command holding the lock (rebuild/update drop the unbooted generation) nobody is asked
+    def confirmUnlessLocked [prompt: string] {
+        if ($env.NIXOS_CONFIG_LOCKED? != "1") and not (confirmHuman $prompt) { exit 1 }
+    }
     def "main del" [...ids: string] {
         rootOrSudo del ...$ids
+        confirmUnlessLocked $"delete generations ($ids | str join ' ')?"
         ^${scripts.bin."nix-env"} --profile /nix/var/nix/profiles/system --delete-generations ...$ids
         ^${scripts.bin."switch-to-configuration"} boot
     }
     def "main switch" [id: string] {
         rootOrSudo switch $id
+        confirmUnlessLocked $"switch to generation ($id)?"
         let stc = $"/nix/var/nix/profiles/system-($id)-link/bin/switch-to-configuration"
         ^$stc switch
     }

@@ -64,8 +64,23 @@
             }
         '';
     };
+    # The person at the terminal proves it is a person: sudo asks the caller's password, ignoring any cached
+    # credentials (-k). Runs as the caller, because root is never asked; a genuine root session (no SUDO_USER)
+    # has already proven itself at login. Without a terminal there is nobody to ask: false
+    nuConfirmHuman = ''
+        def confirmHuman [prompt: string] {
+            if not (is-terminal --stdin) { return false }
+            let sudoUser = ($env.SUDO_USER? | default "")
+            if ($sudoUser | is-empty) { return true }
+            try {
+                ^${bin.runuser} -u $sudoUser -- ${bin.sudo} -k -v -p $"($prompt) [password for ($sudoUser)]: "
+                true
+            } catch { false }
+        }
+    '';
     # nushell text shared by every config command: safe git, reporting, foreign hm dir checks
     nuBase = ''
+        ${nuConfirmHuman}
         # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
         def --wrapped gitSafe [repo: string, ...args: string] {
             ^${bin.git} -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=${bin.ssh} -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
