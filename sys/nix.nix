@@ -71,7 +71,7 @@
             path = [ config.nix.package ];
             script = ''
                 ${pkgs.gen}/bin/gen clean
-                ${pkgs.nh}/bin/nh clean all --keep 3 --keep-since 3d --optimise
+                ${pkgs.nh}/bin/nh clean all --keep ${toString (vars.generations or 5)} --keep-since 3d --optimise
             '';
             serviceConfig = {
                 Type = "oneshot";

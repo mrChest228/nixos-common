@@ -30,10 +30,11 @@ in pkgs.writeScriptBin "gen" ''
         let stc = $"/nix/var/nix/profiles/system-($id)-link/bin/switch-to-configuration"
         ^$stc switch
     }
-    # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean
+    # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean.
+    # Keeps vars.generations (default 5) per profile and everything of the last 3 days
     def "main clean" [] {
         rootOrSudo clean
-        ^${scripts.bin.nh} clean all --keep 3 --keep-since 3d --no-gc --no-gcroots
+        ^${scripts.bin.nh} clean all --keep ${toString (vars.generations or 5)} --keep-since 3d --no-gc --no-gcroots
         ^${scripts.bin."switch-to-configuration"} boot
     }
     def "main list" [] { ^${scripts.bin.nh} os info }
