@@ -1,18 +1,10 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     powerManagement.enable = true;
     # Hibernate after 30 min with lid closed
     services.logind.settings.Login = {
-        HandlePowerKey = "hibernate";
+        HandlePowerKey = "hibernate"; # TODO: move to the niri config (the compositor owns the power key; logind only covers ttys)
         HandlePowerKeyLongPress = "poweroff";
         HandleLidSwitch = "suspend-then-hibernate"; # Suspend first, then hibernate when the lid is closed
     };
-    # Define extra configs for hibernation
-    # TODO
-    # systemd.sleep.extraConfig = '' 
-    #     HibernateMode=shutdown
-    #     HibernateDelaySec=30m
-    #     HibernateState=disk
-    #     SuspendState=mem
-    # '';
-    boot.kernelParams = [ "mem_sleep_default=deep" ];
+    systemd.sleep.settings.Sleep.HibernateDelaySec = "30m"; # Fixed delay instead of the battery-discharge estimate
 }

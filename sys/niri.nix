@@ -1,4 +1,4 @@
-{ config, lib, com, pkgs, vars, self, ... }: {
+{ config, lib, pkgs, vars, com, cur, ... }: {
     programs = {
         niri.enable = true;
         # Autostart
@@ -10,10 +10,12 @@
     };
     systemd.services."getty@tty1" = {
         overrideStrategy = "asDropin";
-        serviceConfig.TTYVTDisallocate = "no"; # No console clearing on load for tty1
-        serviceConfig.ExecStart = [
-            ""
-            "-${pkgs.util-linux}/bin/agetty --noclear --skip-login --login-options \"-f ${config.services.getty.autologinUser}\" %I $TERM"
-        ];
+        serviceConfig = {
+            TTYVTDisallocate = "no"; # No console clearing on load for tty1
+            ExecStart = [
+                ""
+                "-${pkgs.util-linux}/bin/agetty --noclear --skip-login --login-options \"-f ${config.services.getty.autologinUser}\" %I $TERM"
+            ];
+        };
     };
 }
