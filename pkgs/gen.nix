@@ -35,10 +35,10 @@ in pkgs.writeScriptBin "gen" ''
         ^$stc switch
     }
     # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean.
-    # Keeps programs.gen.generations (default 5) per profile and everything of the last 3 days
+    # Keeps nh.keep generations (default 5) per profile and everything of the last 3 days
     def "main clean" [] {
         rootOrSudo clean
-        let keep = (try { open /etc/gen/generations | str trim } catch { "5" })  # programs.gen.generations (sys/nix.nix)
+        let keep = (try { open /etc/nh/keep | str trim } catch { "5" })  # nh.keep (sys/options/nh.nix)
         ^${scripts.bin.nh} clean all --keep $keep --keep-since 3d --no-gc --no-gcroots
         ^${scripts.bin."switch-to-configuration"} boot
     }
