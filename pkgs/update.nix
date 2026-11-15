@@ -12,6 +12,7 @@ in (scripts.mkRootFlockCommand "update" ''
         ${scripts.nuSwitch}
         def main [message?: string, --no-add(-n)] {
             checkNoForeign
+            if not (confirmHuman "update the inputs and build a new boot generation?") { exit 1 }
             cd ${vars.configPath}/cur
             let update = (^${scripts.bin.nix} flake update | complete)
             if $update.exit_code != 0 {

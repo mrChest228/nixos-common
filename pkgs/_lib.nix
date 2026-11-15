@@ -183,7 +183,9 @@
                 | where { |e| $e.type == "symlink" and ($e.name | path basename | str starts-with "system-") }
                 | where { |e| ((^${bin.readlink} -f $e.name | complete).stdout | str trim) == $lstGen })
             if (($lstLinks | length) == 1) {
-                ^${bin.gen} del ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
+                ^${bin."nix-env"} --profile /nix/var/nix/profiles/system --delete-generations ($lstLinks.0.name | path basename | str replace -a -r '\D' ''')
+
+                ^${bin."switch-to-configuration"} boot
             }
         }
     '';
