@@ -140,7 +140,11 @@
             if $dirty or ($message | is-not-empty) {
                 let msg = (if ($message | is-empty) { $"($prefix) (date now | format date '%Y-%m-%d %H:%M:%S %:z')" } else { $message })
                 let noAddArgs = if $no_add { [ "--no-add" ] } else { [] }
-                try { ^${bin.cfg} commit $msg ...$noAddArgs }
+                try { ^${bin.cfg} commit $msg ...$noAddArgs } catch { }
+                # a flake sees only what git tracks: with an uncommitted tree the build would silently miss new files
+                if not ((gitSafe $"${vars.configPath}/cur" status --porcelain | complete).stdout | is-empty) {
+                    error make { msg: "the config is not committed (see above), not switching" }
+                }
             }
         }
         # root's HM must only come from root-owned, tightly permissioned hm/root dirs: root evaluates
