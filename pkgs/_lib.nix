@@ -81,8 +81,18 @@
     # nushell text shared by every config command: safe git, reporting, foreign hm dir checks
     nuBase = ''
         ${nuConfirmHuman}
-        # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes
+        # all git calls go through this: hooks and fsmonitor are disabled so the repos' own hooks/watchers can't run, and the deploy key is used for SSH remotes.
+        # git run by hand in the repo takes no flock, only its own .git/index.lock: wait for that one (5 x 3 s) instead of failing;
+        # a lock that outlives 15 s is a crashed git and is reported once, as an error
         def --wrapped gitSafe [repo: string, ...args: string] {
+            let gitDir = (^${bin.git} -C $repo rev-parse --git-dir | complete | get stdout | str trim)
+            let indexLock = ([$repo $gitDir "index.lock"] | path join)
+            mut tries = 0
+            while ($indexLock | path exists) and $tries < 5 {
+                sleep 3sec
+                $tries += 1
+            }
+            if ($indexLock | path exists) { error make { msg: $"($repo): ($indexLock) not released for 15 s: another git is stuck or crashed, remove the file by hand" } }
             ^${bin.git} -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=${bin.ssh} -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
         }
         # manual errors print in red; quiet errors go to the journal (with who ran the root command: sudo's caller, or
