@@ -1,0 +1,48 @@
+# gen — lists, switches, deletes and cleans system, HM and user-profile generations
+# Root-only actions re-run through sudo (NOPASSWD for wheel) when started by a user; gen does not take the config lock.
+# Installed by sys/config/packages+security.nix; update, rebuild and reconf call `gen clean`, switching commands call `gen del`.
+# Usage:
+#   gen del [...ids]
+#   gen switch <id>
+#   gen clean
+#   gen list
+#   gen ls
+# Examples:
+#   gen list
+#   gen clean
+{ lib, pkgs, vars, com, cur }:
+let
+    scripts = import ./_lib.nix { inherit lib pkgs vars com; };
+in pkgs.writeScriptBin "gen" ''
+    #!${pkgs.nushell}/bin/nu -n
+    $env.PATH = ${scripts.binPathNuList}
+    # root-only subcommands re-run the whole command through sudo when started by a user
+    def rootOrSudo [...args: string] {
+        if not (is-admin) { exec ${scripts.bin.sudo} ($env.CURRENT_FILE | path expand) ...$args }
+    }
+    ${scripts.nuConfirmHuman}
+    # del and switch change what the machine boots and what it can roll back to: a person confirms with the password
+    def "main del" [...ids: string] {
+        rootOrSudo del ...$ids
+        if not (confirmHuman $"delete generations ($ids | str join ' ')?") { exit 1 }
+        ^${scripts.bin."nix-env"} --profile /nix/var/nix/profiles/system --delete-generations ...$ids
+        ^${scripts.bin."switch-to-configuration"} boot
+    }
+    def "main switch" [id: string] {
+        rootOrSudo switch $id
+        if not (confirmHuman $"switch to generation ($id)?") { exit 1 }
+        let stc = $"/nix/var/nix/profiles/system-($id)-link/bin/switch-to-configuration"
+        ^$stc switch
+    }
+    # only deletes old generations (system, HM, user profiles), no garbage collection; the store is cleaned by clean.
+    # Keeps nh.keep generations (default 5) per profile and everything of the last 3 days
+    def "main clean" [] {
+        rootOrSudo clean
+        let keep = (try { open /etc/nh/keep | str trim } catch { "5" })  # nh.keep (sys/options/nh.nix)
+        ^${scripts.bin.nh} clean all --keep $keep --keep-since 3d --no-gc --no-gcroots
+        ^${scripts.bin."switch-to-configuration"} boot
+    }
+    def "main list" [] { ^${scripts.bin.nh} os info }
+    def "main ls" [] { ^${scripts.bin."nixos-rebuild"} list-generations }
+    def main [] { help main }
+''
