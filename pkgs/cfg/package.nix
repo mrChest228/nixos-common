@@ -5,13 +5,14 @@
 # Usage:
 #   cfg commit [message] [--host (-h) <host|cur|com>] [--all (-a)] [--single (-s)] [--no-add (-n)] — commit and push changes
 #   cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)] [--help] — rename this or an earlier commit
-#     n is negative; omitted/-0 renames HEAD and -1 renames its parent
+#     n is negative; omitted/-0 renames HEAD and -1 renames its parent; message and n may come in either order
 #   cfg sync [--host (-h) <host|cur|com>] [--all (-a)] [--branch (-b) <branch>] [--quiet (-q)] — fetch, rebase and push; the only command that may confirm a rewritten history
 #   cfg perms — repair config repository permissions
 # Examples:
 #   cfg commit "niri: blur"
 #   cfg rename "niri: blur"
 #   cfg rename "niri: blur" -1   # rename the commit before the last one
+#   cfg rename -1 "niri: blur"   # the same
 #   cfg sync --host cur
 #   cfg sync --branch server   # that branch in every repo that has it, no checkout
 { lib, pkgs, vars, com, cur }:

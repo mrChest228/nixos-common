@@ -1,7 +1,7 @@
 { vars }:
 ''
         # Usage: cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)] [--help]
-        # n is an optional negative offset: omitted or -0 renames HEAD; -1 renames its parent.
+        # n is an optional negative offset: omitted or -0 renames HEAD; -1 renames its parent. Message and n in either order
         const RENAME_USAGE = "Usage: cfg rename <message> [n] [--host (-h) <host|cur|com>] [--single (-s)] [--help]"
         def parseRenameArgs [args: list<string>] {
             mut offset = 0
