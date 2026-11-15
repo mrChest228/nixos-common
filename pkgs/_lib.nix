@@ -85,12 +85,13 @@
         def --wrapped gitSafe [repo: string, ...args: string] {
             ^${bin.git} -C $repo -c core.hooksPath=/dev/null -c core.fsmonitor=false -c "core.sshCommand=${bin.ssh} -i /root/.ssh/nixos-config -o IdentitiesOnly=yes" ...$args
         }
-        # manual errors print in red; quiet errors go to the journal and notify the first user
+        # manual errors print in red; quiet errors go to the journal (with who ran the root command: sudo's caller, or
+        # root itself for the services) and notify the first user
         def reportProblem [repo: string, text: string, --quiet] {
             if not $quiet {
                 print -e $"(ansi red)($repo): ($text)(ansi rst)"
             } else {
-                ^${bin.logger} -t nixos-config $"($repo): ($text)"
+                ^${bin.logger} -t nixos-config $"($repo): ($text) [by ($env.SUDO_USER? | default "root")]"
                 try {
                     ^${bin."systemd-run"} --quiet --machine $"${builtins.head vars.users}@.host" --user ${bin."notify-send"} -u critical "NixOS config" $text
                 } catch { }
