@@ -3,6 +3,8 @@
         DefaultTimeoutStopSec = "30s"; # Services stopping timer before killing during shutting down
         DefaultTimeoutStartSec = "30s";
     };
+    # TODO (server host): systemd.services.<name>.restartIfChanged = false on stateful
+    # services (NAS, DB, media), reloadTriggers where the daemon can reload; restart them by hand
     services.journald.settings.Journal = {
         SystemMaxUse = lib.mkDefault "512M"; # Total size of /var/log/journal, the oldest files are removed first. TODO: 4G on the server host
         SystemKeepFree = "1G";      # Don't grow while the root fs has less free space than this
